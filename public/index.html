@@ -8,68 +8,64 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <style>
         :root {
-            --bg-deep: #050816;
-            --bg-card: rgba(17, 25, 40, 0.75);
-            --border: rgba(255, 255, 255, 0.08);
-            --neon-blue: #00b4ff;
-            --neon-purple: #7b2ff7;
-            --neon-green: #00e676;
-            --neon-red: #ff3d71;
-            --text-primary: #eef2ff;
-            --text-secondary: #8892b0;
-            --text-muted: #495670;
+            --bg-deep: #050816; --bg-card: rgba(17, 25, 40, 0.75); --border: rgba(255, 255, 255, 0.08);
+            --neon-blue: #00b4ff; --neon-purple: #7b2ff7; --neon-green: #00e676; --neon-red: #ff3d71;
+            --text-primary: #eef2ff; --text-secondary: #8892b0; --text-muted: #495670;
         }
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
         body { font-family: 'Inter', sans-serif; background: var(--bg-deep); color: var(--text-primary); min-height: 100vh; }
         
-        /* Background Effects */
         .bg-effect { position: fixed; inset: 0; z-index: -1; overflow: hidden; }
         .orb { position: absolute; border-radius: 50%; filter: blur(120px); opacity: 0.3; }
         .orb-1 { width: 600px; height: 600px; top: -10%; left: -5%; background: var(--neon-blue); animation: float 15s infinite alternate; }
         .orb-2 { width: 500px; height: 500px; bottom: -10%; right: -5%; background: var(--neon-purple); animation: float 20s infinite alternate-reverse; }
         @keyframes float { 0% { transform: translate(0,0); } 100% { transform: translate(50px, 30px); } }
 
-        /* Layout */
         .container { max-width: 1100px; margin: 0 auto; padding: 24px; }
-        
-        /* Header */
-        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 32px; padding-bottom: 16px; border-bottom: 1px solid var(--border); }
+        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 32px; padding-bottom: 16px; border-bottom: 1px solid var(--border); flex-wrap: wrap; gap: 16px;}
         .logo { font-size: 24px; font-weight: 700; background: linear-gradient(135deg, var(--neon-blue), var(--neon-purple)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; display: flex; align-items: center; gap: 10px; }
         .logo i { -webkit-text-fill-color: var(--neon-blue); }
-        .badge { padding: 6px 14px; border-radius: 20px; font-size: 12px; background: rgba(0, 230, 118, 0.1); color: var(--neon-green); border: 1px solid rgba(0,230,118,0.2); }
+        .header-badges { display: flex; gap: 10px; align-items: center; }
+        .badge { padding: 6px 14px; border-radius: 20px; font-size: 12px; background: rgba(0, 230, 118, 0.1); color: var(--neon-green); border: 1px solid rgba(0,230,118,0.2); display: flex; align-items: center; gap: 6px;}
+        .btn-logout { padding: 6px 14px; border-radius: 20px; font-size: 12px; background: rgba(255, 61, 113, 0.1); color: var(--neon-red); border: 1px solid rgba(255,61,113,0.2); cursor: pointer; transition: 0.3s; }
+        .btn-logout:hover { background: rgba(255, 61, 113, 0.2); }
 
-        /* Grid & Cards */
         .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
         @media (max-width: 768px) { .grid { grid-template-columns: 1fr; } }
         .card { background: var(--bg-card); backdrop-filter: blur(16px); border: 1px solid var(--border); border-radius: 16px; padding: 24px; transition: 0.3s; }
         .card:hover { border-color: rgba(0,180,255,0.3); }
         .card-title { font-size: 18px; font-weight: 600; margin-bottom: 20px; display: flex; align-items: center; gap: 10px; color: var(--neon-blue); }
 
-        /* Inputs & Buttons */
         .input-group { margin-bottom: 14px; }
         .input-group label { display: block; font-size: 12px; color: var(--text-secondary); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px; }
-        input, select { width: 100%; padding: 12px 14px; background: rgba(0,0,0,0.3); border: 1px solid var(--border); border-radius: 8px; color: var(--text-primary); font-size: 14px; outline: none; transition: 0.3s; }
-        input:focus { border-color: var(--neon-blue); box-shadow: 0 0 0 2px rgba(0,180,255,0.1); }
+        input, select, textarea { width: 100%; padding: 12px 14px; background: rgba(0,0,0,0.3); border: 1px solid var(--border); border-radius: 8px; color: var(--text-primary); font-size: 14px; outline: none; transition: 0.3s; font-family: 'Inter', sans-serif; }
+        input:focus, textarea:focus { border-color: var(--neon-blue); box-shadow: 0 0 0 2px rgba(0,180,255,0.1); }
+        textarea { resize: vertical; min-height: 80px; }
         
-        .btn { padding: 12px 20px; border-radius: 8px; border: none; font-size: 14px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; transition: 0.3s; }
-        .btn-primary { background: linear-gradient(135deg, var(--neon-blue), var(--neon-purple)); color: white; box-shadow: 0 4px 15px rgba(0,180,255,0.2); }
+        .btn { padding: 12px 20px; border-radius: 8px; border: none; font-size: 14px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 8px; transition: 0.3s; color: white; }
+        .btn-primary { background: linear-gradient(135deg, var(--neon-blue), var(--neon-purple)); box-shadow: 0 4px 15px rgba(0,180,255,0.2); }
         .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(0,180,255,0.4); }
-        .btn-sm { padding: 8px 14px; font-size: 12px; }
         .btn-danger { background: rgba(255,61,113,0.15); color: var(--neon-red); border: 1px solid rgba(255,61,113,0.2); }
+        .btn-success { background: rgba(0,230,118,0.15); color: var(--neon-green); border: 1px solid rgba(0,230,118,0.2); }
+        .btn-full { width: 100%; }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none !important; }
 
-        /* Table */
+        .status-indicator { display: flex; align-items: center; gap: 10px; margin-bottom: 20px; font-size: 14px; font-weight: 500; }
+        .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--text-muted); }
+        .dot.online { background: var(--neon-green); box-shadow: 0 0 10px rgba(0,230,118,0.5); animation: pulse 2s infinite; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+
         .table-wrap { overflow-x: auto; margin-top: 16px; }
         table { width: 100%; border-collapse: collapse; font-size: 13px; }
         th { text-align: left; color: var(--text-secondary); font-weight: 500; padding: 10px; border-bottom: 1px solid var(--border); }
         td { padding: 10px; border-bottom: 1px solid rgba(255,255,255,0.03); }
-        .status { padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; }
-        .status-queued { background: rgba(255,255,255,0.1); color: #fff; }
-        .status-running { background: rgba(0,180,255,0.15); color: var(--neon-blue); }
-        .status-completed { background: rgba(0,230,118,0.15); color: var(--neon-green); }
+        .status-badge { padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; }
+        .bg-queued { background: rgba(255,255,255,0.1); color: #fff; }
+        .bg-running { background: rgba(0,180,255,0.15); color: var(--neon-blue); }
+        .bg-completed { background: rgba(0,230,118,0.15); color: var(--neon-green); }
 
-        /* Login Overlay */
-        .overlay { position: fixed; inset: 0; background: rgba(5,8,22,0.9); backdrop-filter: blur(10px); display: flex; align-items: center; justify-content: center; z-index: 100; }
-        .login-box { width: 340px; }
+        .login-overlay { position: fixed; inset: 0; background: rgba(5,8,22,0.95); backdrop-filter: blur(10px); display: flex; align-items: center; justify-content: center; z-index: 100; }
+        .login-box { width: 380px; }
     </style>
 </head>
 <body>
@@ -78,112 +74,94 @@
         <div class="orb orb-2"></div>
     </div>
 
-    <!-- Login Overlay -->
-    <div class="overlay" id="loginOverlay">
+    <!-- Login Screen -->
+    <div class="login-overlay" id="loginScreen">
         <div class="login-box card">
-            <div class="card-title"><i class="fa-solid fa-lock"></i> Admin Access</div>
+            <div class="card-title" style="justify-content: center; font-size: 22px;"><i class="fa-brands fa-telegram"></i> TeleAdmin Login</div>
             <div class="input-group">
-                <label>Password</label>
-                <input type="password" id="adminPass" placeholder="Enter admin password">
+                <label>Telegram Username</label>
+                <input type="text" id="loginUsername" placeholder="your_username">
             </div>
-            <button class="btn btn-primary" style="width: 100%; justify-content: center; margin-top: 10px;" onclick="loginAdmin()">
-                Unlock Dashboard
-            </button>
+            <button class="btn btn-primary btn-full" onclick="handleLogin()">Access Dashboard</button>
         </div>
     </div>
 
     <!-- Main Dashboard -->
-    <div class="container" id="dashboard" style="display:none;">
+    <div class="container" id="dashboardScreen" style="display:none;">
         <div class="header">
             <div class="logo"><i class="fa-solid fa-bolt"></i> TeleAdmin Pro</div>
-            <div class="badge"><i class="fa-solid fa-circle" style="font-size:8px; margin-right:4px;"></i> System Online</div>
+            <div class="header-badges">
+                <div class="badge" id="sessionCount"><i class="fa-solid fa-user-check"></i> 0 Sessions</div>
+                <button class="btn-logout" onclick="handleLogout()"><i class="fa-solid fa-right-from-bracket"></i> Logout</button>
+            </div>
         </div>
 
         <div class="grid">
-            <!-- Add Account Section -->
+            <!-- Connect Account -->
             <div class="card">
-                <div class="card-title"><i class="fa-solid fa-user-plus"></i> Add Account</div>
-                <div class="input-group">
-                    <label>API ID</label>
-                    <input type="text" id="apiId" placeholder="12345678">
+                <div class="card-title"><i class="fa-solid fa-link"></i> Connect Account</div>
+                <div id="connectForm">
+                    <div class="status-indicator"><div class="dot" id="statusDot"></div> <span id="statusText">Disconnected</span></div>
+                    <div class="input-group"><label>API ID</label><input type="text" id="apiId" placeholder="12345678"></div>
+                    <div class="input-group"><label>API Hash</label><input type="text" id="apiHash" placeholder="abc123..."></div>
+                    <div class="input-group"><label>Phone Number</label><input type="tel" id="phoneNumber" placeholder="+8801XXX..."></div>
+                    <button class="btn btn-primary btn-full" id="sendOtpBtn" onclick="handleSendOTP()">Send OTP</button>
                 </div>
-                <div class="input-group">
-                    <label>API Hash</label>
-                    <input type="text" id="apiHash" placeholder="abc123def456...">
+                <div id="otpForm" style="display:none;">
+                    <div class="input-group"><label>OTP Code</label><input type="text" id="otpCode" placeholder="12345"></div>
+                    <div class="input-group"><label>2FA Password (Optional)</label><input type="password" id="twoFaPassword" placeholder="Leave empty if none"></div>
+                    <button class="btn btn-primary btn-full" onclick="handleVerifyOTP()">Verify & Connect</button>
                 </div>
-                <div class="input-group">
-                    <label>Phone Number</label>
-                    <input type="text" id="phoneNumber" placeholder="+8801XXXXXXXXX">
+                <div id="connectedForm" style="display:none; text-align:center;">
+                    <div style="font-size:48px; color:var(--neon-green); margin-bottom:10px;"><i class="fa-solid fa-circle-check"></i></div>
+                    <h3 style="margin-bottom:15px;">Connected Successfully</h3>
+                    <button class="btn btn-danger" onclick="handleDisconnect()"><i class="fa-solid fa-unlink"></i> Disconnect</button>
                 </div>
-                <button class="btn btn-primary" onclick="addAccount()"><i class="fa-solid fa-plus"></i> Add & Send OTP</button>
             </div>
 
-            <!-- Verify Account Section -->
+            <!-- Auto Reply Settings -->
             <div class="card">
-                <div class="card-title"><i class="fa-solid fa-shield-halved"></i> Verify Account</div>
+                <div class="card-title"><i class="fa-solid fa-reply"></i> Auto Reply System</div>
                 <div class="input-group">
-                    <label>Select Account</label>
-                    <select id="accountSelect" style="width:100%; padding:12px; background:rgba(0,0,0,0.3); color:white; border:1px solid var(--border); border-radius:8px;">
-                        <option value="">-- Select Unverified Account --</option>
-                    </select>
+                    <label>Reply Message</label>
+                    <textarea id="replyMessage">▶️ আমি এখন ব্যস্ত আছি। একটু পরে রিপ্লাই দিব ✅🥺</textarea>
                 </div>
-                <div class="input-group">
-                    <label>OTP Code</label>
-                    <input type="text" id="otpCode" placeholder="12345">
+                <div style="display:flex; gap:10px; margin-bottom:15px;">
+                    <button class="btn btn-success" style="flex:1" onclick="toggleReply(true)"><i class="fa-solid fa-play"></i> Start</button>
+                    <button class="btn btn-danger" style="flex:1" onclick="toggleReply(false)"><i class="fa-solid fa-stop"></i> Stop</button>
                 </div>
-                <button class="btn btn-primary" onclick="verifyAccount()"><i class="fa-solid fa-check-circle"></i> Verify & Connect</button>
+                <button class="btn btn-primary btn-full" onclick="saveReply()"><i class="fa-solid fa-floppy-disk"></i> Save Message</button>
             </div>
 
-            <!-- Reaction API Tester -->
-            <div class="card">
-                <div class="card-title"><i class="fa-solid fa-heart"></i> Send Reaction</div>
-                <p style="font-size:12px; color:var(--text-secondary); margin-bottom:16px;">
-                    API Format: <code style="background:rgba(0,0,0,0.4); padding:2px 6px; border-radius:4px;">/api/react?postlink=URL&emoji=👍</code>
+            <!-- Reaction System -->
+            <div class="card" style="grid-column: span 2;">
+                <div class="card-title"><i class="fa-solid fa-heart"></i> Auto Positive Reaction</div>
+                <p style="font-size:13px; color:var(--text-secondary); margin-bottom:15px;">
+                    Paste a Telegram post link. The system will automatically send <strong style="color:var(--neon-green);">Positive Reactions (👍, ❤️, 🔥)</strong> from all connected accounts with random anti-ban delays.
                 </p>
-                <div class="input-group">
-                    <label>Post Link</label>
-                    <input type="text" id="postLink" placeholder="https://t.me/channel/123">
-                </div>
-                <div class="input-group">
-                    <label>Reaction Emoji</label>
-                    <input type="text" id="emoji" placeholder="👍" value="👍">
-                </div>
-                <button class="btn btn-primary" onclick="sendReaction()"><i class="fa-solid fa-rocket"></i> Start Reaction Task</button>
-            </div>
-
-            <!-- Stats & Info -->
-            <div class="card">
-                <div class="card-title"><i class="fa-solid fa-chart-line"></i> System Stats</div>
-                <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; text-align:center;">
-                    <div style="background:rgba(0,180,255,0.1); padding:20px; border-radius:12px;">
-                        <div style="font-size:28px; font-weight:700; color:var(--neon-blue);" id="totalAcc">0</div>
-                        <div style="font-size:12px; color:var(--text-secondary); margin-top:6px;">Active Accounts</div>
-                    </div>
-                    <div style="background:rgba(139,92,246,0.1); padding:20px; border-radius:12px;">
-                        <div style="font-size:28px; font-weight:700; color:var(--neon-purple);" id="totalTasks">0</div>
-                        <div style="font-size:12px; color:var(--text-secondary); margin-top:6px;">Total Tasks</div>
-                    </div>
+                <div style="display:flex; gap:10px;">
+                    <input type="text" id="postLink" placeholder="https://t.me/channel_name/123" style="flex:1;">
+                    <button class="btn btn-primary" onclick="sendReaction()"><i class="fa-solid fa-rocket"></i> Send Reactions</button>
                 </div>
             </div>
         </div>
 
         <!-- Tasks Table -->
         <div class="card" style="margin-top:24px;">
-            <div class="card-title"><i class="fa-solid fa-list-check"></i> Task Logs</div>
+            <div class="card-title"><i class="fa-solid fa-list-check"></i> Live Task Logs</div>
             <div class="table-wrap">
                 <table>
                     <thead>
                         <tr>
                             <th>Task ID</th>
                             <th>Target Post</th>
-                            <th>Emoji</th>
                             <th>Status</th>
-                            <th>Progress</th>
-                            <th>Time</th>
+                            <th>Progress (Success / Fail)</th>
+                            <th>Initiated</th>
                         </tr>
                     </thead>
                     <tbody id="taskTableBody">
-                        <tr><td colspan="6" style="text-align:center; color:var(--text-muted);">No tasks yet</td></tr>
+                        <tr><td colspan="5" style="text-align:center; color:var(--text-muted);">No reaction tasks yet</td></tr>
                     </tbody>
                 </table>
             </div>
@@ -191,167 +169,163 @@
     </div>
 
     <script>
-        let isAdmin = false;
+        let isConnected = false;
 
-        // Check Session on Load
-        async function checkSession() {
+        async function checkLogin() {
             try {
-                // Attempt to fetch accounts, if unauthorized, show login
-                await loadAccounts();
-                document.getElementById('loginOverlay').style.display = 'none';
-                document.getElementById('dashboard').style.display = 'block';
-                isAdmin = true;
-                loadTasks(); // Start auto-refreshing tasks
+                const res = await fetch('/status');
+                const data = await res.json();
+                if (data.logged_in) {
+                    document.getElementById('loginScreen').style.display = 'none';
+                    document.getElementById('dashboardScreen').style.display = 'block';
+                    loadStatus();
+                } else {
+                    document.getElementById('loginScreen').style.display = 'flex';
+                    document.getElementById('dashboardScreen').style.display = 'none';
+                }
             } catch(e) {
-                document.getElementById('loginOverlay').style.display = 'flex';
-                document.getElementById('dashboard').style.display = 'none';
+                document.getElementById('loginScreen').style.display = 'flex';
             }
         }
 
-        async function loginAdmin() {
-            const pass = document.getElementById('adminPass').value;
-            const res = await fetch('/api/admin/login', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({password: pass})
-            });
+        async function handleLogin() {
+            const username = document.getElementById('loginUsername').value.trim().replace('@','');
+            if(!username) return alert('Enter username');
+            const res = await fetch('/login', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({username}) });
             const data = await res.json();
-            if(data.success) {
-                isAdmin = true;
-                document.getElementById('loginOverlay').style.display = 'none';
-                document.getElementById('dashboard').style.display = 'block';
-                loadAccounts();
-                loadTasks();
+            if(data.success) checkLogin();
+            else alert(data.error);
+        }
+
+        async function handleLogout() {
+            await fetch('/logout', { method: 'POST' });
+            isConnected = false;
+            checkLogin();
+        }
+
+        async function loadStatus() {
+            const res = await fetch('/status');
+            const data = await res.json();
+            if(!data.logged_in) return checkLogin();
+
+            isConnected = data.connected;
+            document.getElementById('sessionCount').innerHTML = `<i class="fa-solid fa-user-check"></i> ${data.accounts_connected} Sessions`;
+            document.getElementById('statusDot').className = isConnected ? 'dot online' : 'dot';
+            document.getElementById('statusText').innerText = isConnected ? 'Connected' : 'Disconnected';
+
+            if(isConnected) {
+                document.getElementById('connectForm').style.display = 'none';
+                document.getElementById('otpForm').style.display = 'none';
+                document.getElementById('connectedForm').style.display = 'block';
             } else {
-                alert('Invalid Password!');
+                document.getElementById('connectForm').style.display = 'block';
+                document.getElementById('connectedForm').style.display = 'none';
             }
+
+            if(data.reply_message) document.getElementById('replyMessage').value = data.reply_message;
+            loadTasks();
         }
 
-        async function addAccount() {
-            const api_id = document.getElementById('apiId').value;
-            const api_hash = document.getElementById('apiHash').value;
-            const phone = document.getElementById('phoneNumber').value;
-
-            if(!api_id || !api_hash || !phone) return alert('Fill all fields');
-
-            const res = await fetch('/api/admin/accounts', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({api_id, api_hash, phone})
-            });
-            const data = await res.json();
+        // OTP Flow
+        async function handleSendOTP() {
+            const payload = {
+                api_id: document.getElementById('apiId').value.trim(),
+                api_hash: document.getElementById('apiHash').value.trim(),
+                phone_number: document.getElementById('phoneNumber').value.trim()
+            };
+            if(!payload.api_id || !payload.api_hash || !payload.phone_number) return alert('Fill all fields');
             
+            const res = await fetch('/send-otp', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+            const data = await res.json();
             if(data.success) {
-                alert('Account added! Now select it in Verify section and send OTP.');
-                loadAccounts();
-                // Auto send OTP
-                document.getElementById('accountSelect').value = data.account.id;
-                sendOtp(data.account.id);
-            } else {
-                alert(data.error || 'Failed to add account');
+                document.getElementById('connectForm').style.display = 'none';
+                document.getElementById('otpForm').style.display = 'block';
+                alert('OTP Sent to your Telegram app!');
+            } else alert(data.error);
+        }
+
+        async function handleVerifyOTP() {
+            const payload = {
+                code: document.getElementById('otpCode').value.trim(),
+                password: document.getElementById('twoFaPassword').value
+            };
+            const res = await fetch('/verify-otp', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+            const data = await res.json();
+            if(data.success) {
+                isConnected = true;
+                loadStatus();
+            } else alert(data.error);
+        }
+
+        async function handleDisconnect() {
+            if(confirm('Are you sure you want to disconnect?')) {
+                await fetch('/disconnect', { method: 'POST' });
+                isConnected = false;
+                loadStatus();
             }
         }
 
-        async function loadAccounts() {
-            const res = await fetch('/api/admin/accounts');
+        // Auto Reply
+        async function toggleReply(state) {
+            if(!isConnected) return alert('Connect account first!');
+            const res = await fetch('/toggle-reply', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({enabled: state}) });
             const data = await res.json();
-            const select = document.getElementById('accountSelect');
-            select.innerHTML = '<option value="">-- Select Unverified Account --</option>';
-            
-            let activeCount = 0;
-            data.accounts.forEach(acc => {
-                const opt = document.createElement('option');
-                opt.value = acc.id;
-                opt.textContent = acc.phone;
-                select.appendChild(opt);
-                activeCount++;
-            });
-            document.getElementById('totalAcc').innerText = activeCount;
+            if(data.success) alert(state ? 'Auto Reply Started!' : 'Auto Reply Stopped!');
+            else alert(data.error);
         }
 
-        async function sendOtp(accId) {
-            if(!accId) accId = document.getElementById('accountSelect').value;
-            if(!accId) return alert('Select an account first');
-
-            await fetch('/api/admin/send-otp', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({acc_id: accId})
-            });
-            alert('OTP Sent to Telegram App!');
-        }
-
-        async function verifyAccount() {
-            const acc_id = document.getElementById('accountSelect').value;
-            const code = document.getElementById('otpCode').value;
-            if(!acc_id || !code) return alert('Select account and enter OTP');
-
-            const res = await fetch('/api/admin/verify-otp', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({acc_id, code})
-            });
+        async function saveReply() {
+            const msg = document.getElementById('replyMessage').value.trim();
+            if(!msg) return alert('Message cannot be empty');
+            const res = await fetch('/save-reply', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({message: msg}) });
             const data = await res.json();
-            if(data.success) {
-                alert('Account Connected Successfully!');
-                loadAccounts();
-            } else {
-                alert(data.error || 'Verification Failed');
-            }
+            if(data.success) alert('Reply Message Saved!');
         }
 
+        // Reaction API
         async function sendReaction() {
-            const postlink = document.getElementById('postLink').value;
-            const emoji = document.getElementById('emoji').value || '👍';
-            if(!postlink) return alert('Enter post link');
-
-            const res = await fetch(`/api/react?postlink=${encodeURIComponent(postlink)}&emoji=${encodeURIComponent(emoji)}`);
+            const link = document.getElementById('postLink').value.trim();
+            if(!link) return alert('Enter post link');
+            const res = await fetch(`/api/react?postlink=${encodeURIComponent(link)}`);
             const data = await res.json();
             if(data.success) {
-                alert(`Task Queued! Engaging ${data.accounts_engaged} accounts.`);
+                alert(`Task Queued! ${data.task_id}`);
                 document.getElementById('postLink').value = '';
                 loadTasks();
-            } else {
-                alert(data.error || 'Failed to start task');
-            }
+            } else alert(data.error);
         }
 
         async function loadTasks() {
-            if(!isAdmin) return;
-            const res = await fetch('/api/admin/tasks');
-            const data = await res.json();
-            const tbody = document.getElementById('taskTableBody');
-            
-            document.getElementById('totalTasks').innerText = data.tasks.length;
-            
-            if(data.tasks.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; color:var(--text-muted);">No tasks yet</td></tr>';
-                return;
-            }
+            try {
+                const res = await fetch('/api/tasks');
+                const data = await res.json();
+                const tbody = document.getElementById('taskTableBody');
+                
+                if(data.tasks.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; color:var(--text-muted);">No reaction tasks yet</td></tr>';
+                    return;
+                }
 
-            tbody.innerHTML = '';
-            // Show latest first
-            const sortedTasks = data.tasks.reverse();
-            sortedTasks.forEach(t => {
-                const statusClass = t.status.toLowerCase();
-                const tr = document.createElement('tr');
-                tr.innerHTML = `
-                    <td style="font-family:monospace; font-size:11px;">${t.id}</td>
-                    <td><a href="${t.link}" target="_blank" style="color:var(--neon-blue); text-decoration:none;">${t.channel}/${t.msg_id}</a></td>
-                    <td style="font-size:18px;">${t.emoji}</td>
-                    <td><span class="status status-${statusClass}">${t.status}</span></td>
-                    <td>✅ ${t.success} / ❌ ${t.failed} / Total: ${t.total_accounts}</td>
-                    <td style="font-size:11px; color:var(--text-secondary);">${new Date(t.created_at).toLocaleTimeString()}</td>
-                `;
-                tbody.appendChild(tr);
-            });
+                tbody.innerHTML = '';
+                data.tasks.reverse().forEach(t => {
+                    const statusClass = t.status.toLowerCase();
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = `
+                        <td style="font-family:monospace; font-size:11px;">${t.id}</td>
+                        <td><a href="${t.link}" target="_blank" style="color:var(--neon-blue); text-decoration:none;">${t.channel}/${t.msg_id}</a></td>
+                        <td><span class="status-badge bg-${statusClass}">${t.status}</span></td>
+                        <td>✅ ${t.success} / ❌ ${t.failed} <small style="color:var(--text-muted);">(Total: ${t.total_accounts})</small></td>
+                        <td style="font-size:11px; color:var(--text-secondary);">${new Date(t.created_at).toLocaleTimeString()}</td>
+                    `;
+                    tbody.appendChild(tr);
+                });
+            } catch(e) {}
         }
 
-        // Auto refresh tasks every 3 seconds
+        // Auto refresh tasks table every 3 seconds
         setInterval(loadTasks, 3000);
 
-        // Init
-        checkSession();
+        checkLogin();
     </script>
 </body>
 </html>
