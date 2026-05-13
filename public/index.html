@@ -3,329 +3,192 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>TeleAdmin — Premium Panel</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <title>Telegram Auto Reply - Premium</title>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <style>
         :root {
-            --bg-deep: #050816; --bg-card: rgba(17, 25, 40, 0.75); --border: rgba(255, 255, 255, 0.08);
-            --neon-blue: #00b4ff; --neon-purple: #7b2ff7; --neon-green: #00e676; --neon-red: #ff3d71;
-            --text-primary: #eef2ff; --text-secondary: #8892b0; --text-muted: #495670;
+            --bg-deep: #04060f; --bg-card: rgba(12, 18, 45, 0.65); --border-glow: rgba(0, 180, 255, 0.12);
+            --neon-blue: #00b4ff; --neon-purple: #8b5cf6; --neon-green: #00e676; --neon-red: #ff3d71;
+            --text-primary: #eef2ff; --text-secondary: #7b8ab8; --text-muted: #3e4a6d;
         }
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-        body { font-family: 'Inter', sans-serif; background: var(--bg-deep); color: var(--text-primary); min-height: 100vh; }
+        body { font-family: 'Space Grotesk', sans-serif; background: var(--bg-deep); color: var(--text-primary); min-height: 100vh; overflow-x: hidden; }
         
-        .bg-effect { position: fixed; inset: 0; z-index: -1; overflow: hidden; }
-        .orb { position: absolute; border-radius: 50%; filter: blur(120px); opacity: 0.3; }
-        .orb-1 { width: 600px; height: 600px; top: -10%; left: -5%; background: var(--neon-blue); animation: float 15s infinite alternate; }
-        .orb-2 { width: 500px; height: 500px; bottom: -10%; right: -5%; background: var(--neon-purple); animation: float 20s infinite alternate-reverse; }
-        @keyframes float { 0% { transform: translate(0,0); } 100% { transform: translate(50px, 30px); } }
+        /* Background */
+        .bg-orb { position: fixed; border-radius: 50%; filter: blur(100px); opacity: 0.3; z-index: 0; animation: float 15s infinite alternate; }
+        .orb1 { width: 400px; height: 400px; top: -10%; left: -5%; background: var(--neon-blue); }
+        .orb2 { width: 350px; height: 350px; bottom: -10%; right: -5%; background: var(--neon-purple); }
+        @keyframes float { 0%{transform:translate(0,0)} 100%{transform:translate(30px,-30px)} }
 
-        .container { max-width: 1100px; margin: 0 auto; padding: 24px; }
-        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 32px; padding-bottom: 16px; border-bottom: 1px solid var(--border); flex-wrap: wrap; gap: 16px;}
-        .logo { font-size: 24px; font-weight: 700; background: linear-gradient(135deg, var(--neon-blue), var(--neon-purple)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; display: flex; align-items: center; gap: 10px; }
-        .logo i { -webkit-text-fill-color: var(--neon-blue); }
-        .header-badges { display: flex; gap: 10px; align-items: center; }
-        .badge { padding: 6px 14px; border-radius: 20px; font-size: 12px; background: rgba(0, 230, 118, 0.1); color: var(--neon-green); border: 1px solid rgba(0,230,118,0.2); display: flex; align-items: center; gap: 6px;}
-        .btn-logout { padding: 6px 14px; border-radius: 20px; font-size: 12px; background: rgba(255, 61, 113, 0.1); color: var(--neon-red); border: 1px solid rgba(255,61,113,0.2); cursor: pointer; transition: 0.3s; }
-        .btn-logout:hover { background: rgba(255, 61, 113, 0.2); }
+        /* Layout */
+        .screen { display: none; position: relative; z-index: 1; min-height: 100vh; padding: 24px; justify-content: center; align-items: center; flex-direction: column; }
+        .screen.active { display: flex; animation: fadeIn 0.5s; }
+        @keyframes fadeIn { from{opacity:0;transform:translateY(20px)} to{opacity:1;transform:translateY(0)} }
 
-        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
-        @media (max-width: 768px) { .grid { grid-template-columns: 1fr; } }
-        .card { background: var(--bg-card); backdrop-filter: blur(16px); border: 1px solid var(--border); border-radius: 16px; padding: 24px; transition: 0.3s; }
-        .card:hover { border-color: rgba(0,180,255,0.3); }
-        .card-title { font-size: 18px; font-weight: 600; margin-bottom: 20px; display: flex; align-items: center; gap: 10px; color: var(--neon-blue); }
-
-        .input-group { margin-bottom: 14px; }
-        .input-group label { display: block; font-size: 12px; color: var(--text-secondary); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px; }
-        input, select, textarea { width: 100%; padding: 12px 14px; background: rgba(0,0,0,0.3); border: 1px solid var(--border); border-radius: 8px; color: var(--text-primary); font-size: 14px; outline: none; transition: 0.3s; font-family: 'Inter', sans-serif; }
-        input:focus, textarea:focus { border-color: var(--neon-blue); box-shadow: 0 0 0 2px rgba(0,180,255,0.1); }
-        textarea { resize: vertical; min-height: 80px; }
+        /* Card */
+        .glass { background: var(--bg-card); backdrop-filter: blur(20px); border: 1px solid var(--border-glow); border-radius: 20px; padding: 35px; width: 100%; max-width: 440px; }
         
-        .btn { padding: 12px 20px; border-radius: 8px; border: none; font-size: 14px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 8px; transition: 0.3s; color: white; }
-        .btn-primary { background: linear-gradient(135deg, var(--neon-blue), var(--neon-purple)); box-shadow: 0 4px 15px rgba(0,180,255,0.2); }
-        .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(0,180,255,0.4); }
-        .btn-danger { background: rgba(255,61,113,0.15); color: var(--neon-red); border: 1px solid rgba(255,61,113,0.2); }
-        .btn-success { background: rgba(0,230,118,0.15); color: var(--neon-green); border: 1px solid rgba(0,230,118,0.2); }
-        .btn-full { width: 100%; }
-        .btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none !important; }
+        /* Logo */
+        .logo { width: 70px; height: 70px; border-radius: 20px; background: linear-gradient(135deg, var(--neon-blue), var(--neon-purple)); display: flex; align-items: center; justify-content: center; font-size: 30px; color: #fff; margin: 0 auto 25px; box-shadow: 0 0 30px rgba(0,180,255,0.4); }
+        h1 { text-align: center; font-size: 24px; margin-bottom: 8px; background: linear-gradient(135deg, #fff, var(--neon-blue)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+        .sub { text-align: center; color: var(--text-secondary); font-size: 14px; margin-bottom: 30px; }
 
-        .status-indicator { display: flex; align-items: center; gap: 10px; margin-bottom: 20px; font-size: 14px; font-weight: 500; }
+        /* Inputs */
+        .input-group { margin-bottom: 18px; }
+        label { display: block; font-size: 12px; text-transform: uppercase; letter-spacing: 0.8px; color: var(--text-secondary); margin-bottom: 8px; font-weight: 600; }
+        input, textarea { width: 100%; padding: 14px 16px; background: rgba(6,10,25,0.7); border: 1px solid rgba(255,255,255,0.06); border-radius: 12px; color: var(--text-primary); font-size: 15px; outline: none; transition: 0.3s; font-family: inherit; }
+        input:focus, textarea:focus { border-color: var(--neon-blue); box-shadow: 0 0 0 3px rgba(0,180,255,0.1); }
+        textarea { min-height: 100px; resize: vertical; }
+
+        /* Buttons */
+        .btn { width: 100%; padding: 14px; border-radius: 50px; font-size: 15px; font-weight: 600; cursor: pointer; border: none; transition: 0.3s; display: flex; justify-content: center; align-items: center; gap: 8px; }
+        .btn-primary { background: linear-gradient(135deg, var(--neon-blue), var(--neon-purple)); color: #fff; box-shadow: 0 0 20px rgba(0,180,255,0.3); }
+        .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 0 30px rgba(0,180,255,0.5); }
+        .btn-danger { background: rgba(255,61,113,0.15); color: var(--neon-red); border: 1px solid rgba(255,61,113,0.2); margin-top: 15px; }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        /* Status */
+        .status { display: flex; align-items: center; gap: 10px; padding: 12px; background: rgba(0,0,0,0.2); border-radius: 12px; margin-bottom: 20px; font-size: 13px; }
         .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--text-muted); }
-        .dot.online { background: var(--neon-green); box-shadow: 0 0 10px rgba(0,230,118,0.5); animation: pulse 2s infinite; }
-        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+        .dot.on { background: var(--neon-green); box-shadow: 0 0 10px var(--neon-green); animation: pulse 2s infinite; }
+        @keyframes pulse { 0%{opacity:1} 50%{opacity:0.5} 100%{opacity:1} }
 
-        .table-wrap { overflow-x: auto; margin-top: 16px; }
-        table { width: 100%; border-collapse: collapse; font-size: 13px; }
-        th { text-align: left; color: var(--text-secondary); font-weight: 500; padding: 10px; border-bottom: 1px solid var(--border); }
-        td { padding: 10px; border-bottom: 1px solid rgba(255,255,255,0.03); }
-        .status-badge { padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; }
-        .bg-queued { background: rgba(255,255,255,0.1); color: #fff; }
-        .bg-running { background: rgba(0,180,255,0.15); color: var(--neon-blue); }
-        .bg-completed { background: rgba(0,230,118,0.15); color: var(--neon-green); }
+        /* Toggle */
+        .toggle-row { display: flex; justify-content: space-between; align-items: center; margin: 20px 0; }
+        .toggle { width: 48px; height: 26px; background: rgba(255,255,255,0.1); border-radius: 13px; position: relative; cursor: pointer; transition: 0.3s; }
+        .toggle.on { background: var(--neon-blue); }
+        .toggle::after { content: ''; position: absolute; width: 20px; height: 20px; background: #fff; border-radius: 50%; top: 3px; left: 3px; transition: 0.3s; }
+        .toggle.on::after { transform: translateX(22px); }
 
-        .login-overlay { position: fixed; inset: 0; background: rgba(5,8,22,0.95); backdrop-filter: blur(10px); display: flex; align-items: center; justify-content: center; z-index: 100; }
-        .login-box { width: 380px; }
+        /* Toast */
+        .toast { position: fixed; top: 20px; right: 20px; padding: 14px 20px; background: rgba(12,18,45,0.9); border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; font-size: 13px; z-index: 9999; animation: slideIn 0.4s; }
+        @keyframes slideIn { from{transform:translateX(100px);opacity:0} to{transform:translateX(0);opacity:1} }
     </style>
 </head>
 <body>
-    <div class="bg-effect">
-        <div class="orb orb-1"></div>
-        <div class="orb orb-2"></div>
-    </div>
+    <div class="bg-orb orb1"></div>
+    <div class="bg-orb orb2"></div>
 
     <!-- Login Screen -->
-    <div class="login-overlay" id="loginScreen">
-        <div class="login-box card">
-            <div class="card-title" style="justify-content: center; font-size: 22px;"><i class="fa-brands fa-telegram"></i> TeleAdmin Login</div>
+    <div class="screen active" id="loginScreen">
+        <div class="glass">
+            <div class="logo"><i class="fa-brands fa-telegram"></i></div>
+            <h1>Auto Reply</h1>
+            <p class="sub">Enter Telegram username to continue</p>
             <div class="input-group">
-                <label>Telegram Username</label>
-                <input type="text" id="loginUsername" placeholder="your_username">
+                <label>Username</label>
+                <input type="text" id="loginUser" placeholder="your_username">
             </div>
-            <button class="btn btn-primary btn-full" onclick="handleLogin()">Access Dashboard</button>
+            <button class="btn btn-primary" onclick="login()">Continue</button>
         </div>
     </div>
 
-    <!-- Main Dashboard -->
-    <div class="container" id="dashboardScreen" style="display:none;">
-        <div class="header">
-            <div class="logo"><i class="fa-solid fa-bolt"></i> TeleAdmin Pro</div>
-            <div class="header-badges">
-                <div class="badge" id="sessionCount"><i class="fa-solid fa-user-check"></i> 0 Sessions</div>
-                <button class="btn-logout" onclick="handleLogout()"><i class="fa-solid fa-right-from-bracket"></i> Logout</button>
+    <!-- Dashboard Screen -->
+    <div class="screen" id="dashScreen">
+        <div class="glass">
+            <div class="status">
+                <div class="dot" id="statusDot"></div>
+                <span id="statusText">Disconnected</span>
             </div>
-        </div>
 
-        <div class="grid">
-            <!-- Connect Account -->
-            <div class="card">
-                <div class="card-title"><i class="fa-solid fa-link"></i> Connect Account</div>
-                <div id="connectForm">
-                    <div class="status-indicator"><div class="dot" id="statusDot"></div> <span id="statusText">Disconnected</span></div>
-                    <div class="input-group"><label>API ID</label><input type="text" id="apiId" placeholder="12345678"></div>
-                    <div class="input-group"><label>API Hash</label><input type="text" id="apiHash" placeholder="abc123..."></div>
-                    <div class="input-group"><label>Phone Number</label><input type="tel" id="phoneNumber" placeholder="+8801XXX..."></div>
-                    <button class="btn btn-primary btn-full" id="sendOtpBtn" onclick="handleSendOTP()">Send OTP</button>
-                </div>
-                <div id="otpForm" style="display:none;">
+            <!-- Connect Form -->
+            <div id="connectForm">
+                <div class="input-group"><label>API ID</label><input type="text" id="apiId" placeholder="12345678"></div>
+                <div class="input-group"><label>API Hash</label><input type="text" id="apiHash" placeholder="abc123..."></div>
+                <div class="input-group"><label>Phone Number</label><input type="text" id="phone" placeholder="+880..."></div>
+                <button class="btn btn-primary" onclick="sendOtp()">Send OTP</button>
+                
+                <div id="otpDiv" style="display:none; margin-top:20px;">
                     <div class="input-group"><label>OTP Code</label><input type="text" id="otpCode" placeholder="12345"></div>
-                    <div class="input-group"><label>2FA Password (Optional)</label><input type="password" id="twoFaPassword" placeholder="Leave empty if none"></div>
-                    <button class="btn btn-primary btn-full" onclick="handleVerifyOTP()">Verify & Connect</button>
-                </div>
-                <div id="connectedForm" style="display:none; text-align:center;">
-                    <div style="font-size:48px; color:var(--neon-green); margin-bottom:10px;"><i class="fa-solid fa-circle-check"></i></div>
-                    <h3 style="margin-bottom:15px;">Connected Successfully</h3>
-                    <button class="btn btn-danger" onclick="handleDisconnect()"><i class="fa-solid fa-unlink"></i> Disconnect</button>
+                    <div class="input-group"><label>2FA Password (Optional)</label><input type="password" id="password" placeholder="Leave empty"></div>
+                    <button class="btn btn-primary" onclick="verifyOtp()">Verify & Connect</button>
                 </div>
             </div>
 
-            <!-- Auto Reply Settings -->
-            <div class="card">
-                <div class="card-title"><i class="fa-solid fa-reply"></i> Auto Reply System</div>
+            <!-- Connected View -->
+            <div id="connectedView" style="display:none;">
+                <div class="toggle-row">
+                    <span>Enable Auto Reply</span>
+                    <div class="toggle" id="replyToggle" onclick="toggleReply()"></div>
+                </div>
                 <div class="input-group">
                     <label>Reply Message</label>
-                    <textarea id="replyMessage">▶️ আমি এখন ব্যস্ত আছি। একটু পরে রিপ্লাই দিব ✅🥺</textarea>
+                    <textarea id="replyMsg">▶️ আমি এখন ব্যস্ত আছি। একটু পরে রিপ্লাই দিব ✅🥺</textarea>
                 </div>
-                <div style="display:flex; gap:10px; margin-bottom:15px;">
-                    <button class="btn btn-success" style="flex:1" onclick="toggleReply(true)"><i class="fa-solid fa-play"></i> Start</button>
-                    <button class="btn btn-danger" style="flex:1" onclick="toggleReply(false)"><i class="fa-solid fa-stop"></i> Stop</button>
-                </div>
-                <button class="btn btn-primary btn-full" onclick="saveReply()"><i class="fa-solid fa-floppy-disk"></i> Save Message</button>
-            </div>
-
-            <!-- Reaction System -->
-            <div class="card" style="grid-column: span 2;">
-                <div class="card-title"><i class="fa-solid fa-heart"></i> Auto Positive Reaction</div>
-                <p style="font-size:13px; color:var(--text-secondary); margin-bottom:15px;">
-                    Paste a Telegram post link. The system will automatically send <strong style="color:var(--neon-green);">Positive Reactions (👍, ❤️, 🔥)</strong> from all connected accounts with random anti-ban delays.
-                </p>
-                <div style="display:flex; gap:10px;">
-                    <input type="text" id="postLink" placeholder="https://t.me/channel_name/123" style="flex:1;">
-                    <button class="btn btn-primary" onclick="sendReaction()"><i class="fa-solid fa-rocket"></i> Send Reactions</button>
-                </div>
-            </div>
-        </div>
-
-        <!-- Tasks Table -->
-        <div class="card" style="margin-top:24px;">
-            <div class="card-title"><i class="fa-solid fa-list-check"></i> Live Task Logs</div>
-            <div class="table-wrap">
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Task ID</th>
-                            <th>Target Post</th>
-                            <th>Status</th>
-                            <th>Progress (Success / Fail)</th>
-                            <th>Initiated</th>
-                        </tr>
-                    </thead>
-                    <tbody id="taskTableBody">
-                        <tr><td colspan="5" style="text-align:center; color:var(--text-muted);">No reaction tasks yet</td></tr>
-                    </tbody>
-                </table>
+                <button class="btn btn-primary" onclick="saveReply()">Save Settings</button>
+                <button class="btn btn-danger" onclick="disconnect()">Disconnect Account</button>
             </div>
         </div>
     </div>
 
     <script>
-        let isConnected = false;
+        let isConnected = false, isReplying = false;
 
-        async function checkLogin() {
-            try {
-                const res = await fetch('/status');
-                const data = await res.json();
-                if (data.logged_in) {
-                    document.getElementById('loginScreen').style.display = 'none';
-                    document.getElementById('dashboardScreen').style.display = 'block';
-                    loadStatus();
-                } else {
-                    document.getElementById('loginScreen').style.display = 'flex';
-                    document.getElementById('dashboardScreen').style.display = 'none';
-                }
-            } catch(e) {
-                document.getElementById('loginScreen').style.display = 'flex';
-            }
+        function showScreen(id) {
+            document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+            document.getElementById(id).classList.add('active');
         }
 
-        async function handleLogin() {
-            const username = document.getElementById('loginUsername').value.trim().replace('@','');
-            if(!username) return alert('Enter username');
-            const res = await fetch('/login', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({username}) });
-            const data = await res.json();
-            if(data.success) checkLogin();
-            else alert(data.error);
+        function toast(msg) {
+            const t = document.createElement('div'); t.className = 'toast'; t.innerText = msg;
+            document.body.appendChild(t); setTimeout(() => t.remove(), 3000);
         }
 
-        async function handleLogout() {
-            await fetch('/logout', { method: 'POST' });
-            isConnected = false;
-            checkLogin();
+        async function login() {
+            const u = document.getElementById('loginUser').value.trim();
+            if(!u) return toast('Enter username');
+            const res = await fetch('/login', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({username: u}) });
+            if(res.ok) { showScreen('dashScreen'); checkStatus(); }
         }
 
-        async function loadStatus() {
-            const res = await fetch('/status');
-            const data = await res.json();
-            if(!data.logged_in) return checkLogin();
-
-            isConnected = data.connected;
-            document.getElementById('sessionCount').innerHTML = `<i class="fa-solid fa-user-check"></i> ${data.accounts_connected} Sessions`;
-            document.getElementById('statusDot').className = isConnected ? 'dot online' : 'dot';
-            document.getElementById('statusText').innerText = isConnected ? 'Connected' : 'Disconnected';
-
-            if(isConnected) {
-                document.getElementById('connectForm').style.display = 'none';
-                document.getElementById('otpForm').style.display = 'none';
-                document.getElementById('connectedForm').style.display = 'block';
-            } else {
-                document.getElementById('connectForm').style.display = 'block';
-                document.getElementById('connectedForm').style.display = 'none';
-            }
-
-            if(data.reply_message) document.getElementById('replyMessage').value = data.reply_message;
-            loadTasks();
+        async function sendOtp() {
+            const data = { api_id: document.getElementById('apiId').value, api_hash: document.getElementById('apiHash').value, phone_number: document.getElementById('phone').value };
+            const res = await fetch('/send-otp', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(data) });
+            const json = await res.json();
+            if(json.success) { document.getElementById('otpDiv').style.display = 'block'; toast('OTP Sent!'); }
+            else toast(json.error || 'Error');
         }
 
-        // OTP Flow
-        async function handleSendOTP() {
-            const payload = {
-                api_id: document.getElementById('apiId').value.trim(),
-                api_hash: document.getElementById('apiHash').value.trim(),
-                phone_number: document.getElementById('phoneNumber').value.trim()
-            };
-            if(!payload.api_id || !payload.api_hash || !payload.phone_number) return alert('Fill all fields');
-            
-            const res = await fetch('/send-otp', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) });
-            const data = await res.json();
-            if(data.success) {
-                document.getElementById('connectForm').style.display = 'none';
-                document.getElementById('otpForm').style.display = 'block';
-                alert('OTP Sent to your Telegram app!');
-            } else alert(data.error);
+        async function verifyOtp() {
+            const data = { code: document.getElementById('otpCode').value, password: document.getElementById('password').value };
+            const res = await fetch('/verify-otp', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(data) });
+            const json = await res.json();
+            if(json.success) { isConnected = true; updateUI(); toast('Connected!'); }
+            else toast(json.error || 'Error');
         }
 
-        async function handleVerifyOTP() {
-            const payload = {
-                code: document.getElementById('otpCode').value.trim(),
-                password: document.getElementById('twoFaPassword').value
-            };
-            const res = await fetch('/verify-otp', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) });
-            const data = await res.json();
-            if(data.success) {
-                isConnected = true;
-                loadStatus();
-            } else alert(data.error);
-        }
-
-        async function handleDisconnect() {
-            if(confirm('Are you sure you want to disconnect?')) {
-                await fetch('/disconnect', { method: 'POST' });
-                isConnected = false;
-                loadStatus();
-            }
-        }
-
-        // Auto Reply
-        async function toggleReply(state) {
-            if(!isConnected) return alert('Connect account first!');
-            const res = await fetch('/toggle-reply', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({enabled: state}) });
-            const data = await res.json();
-            if(data.success) alert(state ? 'Auto Reply Started!' : 'Auto Reply Stopped!');
-            else alert(data.error);
+        async function toggleReply() {
+            isReplying = !isReplying;
+            const res = await fetch('/toggle-reply', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({enabled: isReplying}) });
+            updateUI();
         }
 
         async function saveReply() {
-            const msg = document.getElementById('replyMessage').value.trim();
-            if(!msg) return alert('Message cannot be empty');
-            const res = await fetch('/save-reply', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({message: msg}) });
-            const data = await res.json();
-            if(data.success) alert('Reply Message Saved!');
+            const msg = document.getElementById('replyMsg').value;
+            await fetch('/save-reply', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({message: msg}) });
+            toast('Saved!');
         }
 
-        // Reaction API
-        async function sendReaction() {
-            const link = document.getElementById('postLink').value.trim();
-            if(!link) return alert('Enter post link');
-            const res = await fetch(`/api/react?postlink=${encodeURIComponent(link)}`);
-            const data = await res.json();
-            if(data.success) {
-                alert(`Task Queued! ${data.task_id}`);
-                document.getElementById('postLink').value = '';
-                loadTasks();
-            } else alert(data.error);
+        async function disconnect() {
+            await fetch('/disconnect', { method: 'POST' });
+            isConnected = false; isReplying = false;
+            document.getElementById('otpDiv').style.display = 'none';
+            updateUI();
         }
 
-        async function loadTasks() {
-            try {
-                const res = await fetch('/api/tasks');
-                const data = await res.json();
-                const tbody = document.getElementById('taskTableBody');
-                
-                if(data.tasks.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; color:var(--text-muted);">No reaction tasks yet</td></tr>';
-                    return;
-                }
-
-                tbody.innerHTML = '';
-                data.tasks.reverse().forEach(t => {
-                    const statusClass = t.status.toLowerCase();
-                    const tr = document.createElement('tr');
-                    tr.innerHTML = `
-                        <td style="font-family:monospace; font-size:11px;">${t.id}</td>
-                        <td><a href="${t.link}" target="_blank" style="color:var(--neon-blue); text-decoration:none;">${t.channel}/${t.msg_id}</a></td>
-                        <td><span class="status-badge bg-${statusClass}">${t.status}</span></td>
-                        <td>✅ ${t.success} / ❌ ${t.failed} <small style="color:var(--text-muted);">(Total: ${t.total_accounts})</small></td>
-                        <td style="font-size:11px; color:var(--text-secondary);">${new Date(t.created_at).toLocaleTimeString()}</td>
-                    `;
-                    tbody.appendChild(tr);
-                });
-            } catch(e) {}
+        function updateUI() {
+            document.getElementById('connectForm').style.display = isConnected ? 'none' : 'block';
+            document.getElementById('connectedView').style.display = isConnected ? 'block' : 'none';
+            document.getElementById('statusDot').className = isConnected ? 'dot on' : 'dot';
+            document.getElementById('statusText').innerText = isConnected ? (isReplying ? 'Auto Reply Active' : 'Connected') : 'Disconnected';
+            document.getElementById('replyToggle').className = isReplying ? 'toggle on' : 'toggle';
         }
 
-        // Auto refresh tasks table every 3 seconds
-        setInterval(loadTasks, 3000);
-
-        checkLogin();
+        async function checkStatus() {
+            const res = await fetch('/status'); const data = await res.json();
+            if(data.logged_in) { isConnected = data.connected; isReplying = data.auto_reply_enabled; updateUI(); }
+        }
     </script>
 </body>
 </html>
