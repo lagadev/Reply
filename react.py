@@ -1,336 +1,91 @@
 import os
-import json
+import re
 import asyncio
 import threading
-import re
-import time
-import random
-from datetime import datetime
-from flask import Flask, request, jsonify
+from flask import Flask, jsonify, request
 from telethon import TelegramClient, errors
-from telethon.tl.functions.messages import SendReactionRequest
-from telethon.tl.types import ReactionEmoji
-
-# ═══════════════════════════════════════════
-# CONFIGURATION
-# ═══════════════════════════════════════════
-
-DATA_DIR = os.environ.get("DATA_DIR", "user_data")
-SESSIONS_DIR = os.environ.get("SESSIONS_DIR", "sessions")
-SETTINGS_FILE = os.path.join(DATA_DIR, "settings.json")
-TASKS_FILE = os.path.join(DATA_DIR, "tasks.json")
-
-os.makedirs(DATA_DIR, exist_ok=True)
-os.makedirs(SESSIONS_DIR, exist_ok=True)
 
 app = Flask(__name__)
-app.secret_key = os.environ.get("SECRET_KEY", "super-secret-admin-key-change-in-prod")
 
-# ═══════════════════════════════════════════
-# GLOBAL STATE
-# ═══════════════════════════════════════════
+# ══════════════════════════════════════════
+# SECURE CREDENTIALS (Environment Variables এ সেভ করবেন)
+# ══════════════════════════════════════════
+API_ID = int(os.environ.get("API_ID", "12345678"))
+API_HASH = os.environ.get("API_HASH", "your_api_hash_here")
+SESSION_NAME = "reactor_session"
 
-clients = {}         # { account_id: TelegramClient }
-loop = None
-loop_thread = None
-active_tasks = {}    # { task_id: asyncio.Task }
+client = None
+_loop = None
 
-def ensure_loop():
-    global loop, loop_thread
-    if loop is not None:
-        return loop
-    loop = asyncio.new_event_loop()
-    def run_loop():
-        asyncio.set_event_loop(loop)
-        loop.run_forever()
-    loop_thread = threading.Thread(target=run_loop, daemon=True)
-    loop_thread.start()
-    return loop
+def _ensure_loop():
+    global _loop
+    if _loop is None:
+        _loop = asyncio.new_event_loop()
+        threading.Thread(target=_loop.run_forever, daemon=True).start()
+    return _loop
 
 def run_async(coro):
-    l = ensure_loop()
-    return asyncio.run_coroutine_threadsafe(coro, l)
+    return asyncio.run_coroutine_threadsafe(coro, _ensure_loop())
 
-# ═══════════════════════════════════════════
-# PERSISTENCE HELPERS
-# ═══════════════════════════════════════════
-
-DEFAULT_SETTINGS = {
-    "admin_password": "admin123", # Change this!
-    "accounts": [] # [{ "id": "acc1", "api_id": "", "api_hash": "", "phone": "", "session_name": "" }]
-}
-
-def load_data(file_path, default):
+async def connect_client():
+    global client
+    if client and client.is_connected():
+        return True
     try:
-        if os.path.exists(file_path):
-            with open(file_path, "r", encoding="utf-8") as f:
-                return json.load(f)
-    except: pass
-    return default.copy()
+        client = TelegramClient(SESSION_NAME, API_ID, API_HASH)
+        await client.connect()
+        if await client.is_user_authorized():
+            return True
+        return False
+    except Exception as e:
+        print(f"Connection Error: {e}")
+        return False
 
-def save_data(file_path, data):
-    with open(file_path, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2, ensure_ascii=False)
+async def _send_reaction(post_url, emoji="👍"):
+    if not await connect_client():
+        return {"success": False, "error": "Telegram account not connected or session expired."}
 
-# ═══════════════════════════════════════════
-# TELETHON CLIENT MANAGEMENT
-# ═══════════════════════════════════════════
+    try:
+        # URL Parse: https://t.me/channel/123 or https://t.me/c/1234567890/123
+        match = re.match(r'https://t\.me/(?:c/)?(\w+|\+[\w]+)/(\d+)', post_url)
+        if not match:
+            return {"success": False, "error": "Invalid Telegram post URL format."}
 
-async def get_client(account):
-    acc_id = account["id"]
-    if acc_id in clients:
-        if not clients[acc_id].is_connected():
-            await clients[acc_id].connect()
-        return clients[acc_id]
-    
-    session_path = os.path.join(SESSIONS_DIR, account["session_name"])
-    client = TelegramClient(session_path, int(account["api_id"]), account["api_hash"])
-    await client.connect()
-    clients[acc_id] = client
-    return client
+        entity_id, msg_id = match.group(1), int(match.group(2))
+        
+        # Resolve Entity
+        if entity_id.startswith('+'): # Private Invite Link (Not supported for messages)
+            return {"success": False, "error": "Private invite links are not supported."}
+        elif entity_id.isdigit(): # Private Channel
+            entity = int('-100' + entity_id)
+        else: # Public Channel
+            entity = await client.get_entity(entity_id)
 
-async def restore_clients():
-    settings = load_data(SETTINGS_FILE, DEFAULT_SETTINGS)
-    for acc in settings.get("accounts", []):
-        try:
-            client = await get_client(acc)
-            if not await client.is_user_authorized():
-                print(f"[Startup] Account {acc['id']} not authorized.")
-                await client.disconnect()
-                del clients[acc["id"]]
-            else:
-                print(f"[Startup] Account {acc['id']} restored.")
-        except Exception as e:
-            print(f"[Startup] Failed to restore {acc['id']}: {e}")
+        # Send Reaction (Safe Mode)
+        await client.send_reaction(entity, msg_id, emoji)
+        return {"success": True, "message": f"Reacted {emoji} successfully!"}
 
-# ═══════════════════════════════════════════
-# REACTION CORE LOGIC (BAN PROOF)
-# ═══════════════════════════════════════════
+    except errors.FloodWaitError as e:
+        return {"success": False, "error": f"Flood wait! Try again after {e.seconds} seconds."}
+    except errors.ChannelPrivateError:
+        return {"success": False, "error": "Cannot react. The channel is private or you are not a member."}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
 
-def parse_post_link(link):
-    pattern = r"https://t.me/([^/]+)/(\d+)"
-    match = re.match(pattern, link)
-    if match:
-        return match.group(1), int(match.group(2))
-    return None, None
-
-async def process_reaction_task(task_id, accounts, channel, msg_id, reaction_emoji):
-    tasks_db = load_data(TASKS_FILE, {})
-    tasks_db[task_id]["status"] = "RUNNING"
-    save_data(TASKS_FILE, tasks_db)
-
-    success = 0
-    failed = 0
-
-    for acc in accounts:
-        try:
-            client = await get_client(acc)
-            if not await client.is_user_authorized():
-                failed += 1
-                continue
-
-            # Anti-ban: Random delay between 3 to 8 seconds per account
-            delay = random.uniform(3, 8)
-            await asyncio.sleep(delay)
-
-            # Send Reaction
-            await client(SendReactionRequest(
-                peer=channel,
-                msg_id=msg_id,
-                reaction=[ReactionEmoji(emoticon=reaction_emoji)]
-            ))
-            success += 1
-            
-            # Update DB progress
-            tasks_db = load_data(TASKS_FILE, {})
-            if task_id in tasks_db:
-                tasks_db[task_id]["success"] = success
-                tasks_db[task_id]["failed"] = failed
-                save_data(TASKS_FILE, tasks_db)
-
-        except errors.FloodWaitError as e:
-            print(f"FloodWait! Sleeping for {e.seconds}s")
-            # Respect Telegram's limits strictly
-            await asyncio.sleep(e.seconds + 5)
-            failed += 1
-        except Exception as e:
-            print(f"Error reacting with {acc['id']}: {e}")
-            failed += 1
-
-    # Task Complete
-    tasks_db = load_data(TASKS_FILE, {})
-    if task_id in tasks_db:
-        tasks_db[task_id]["status"] = "COMPLETED"
-        tasks_db[task_id]["success"] = success
-        tasks_db[task_id]["failed"] = failed
-        tasks_db[task_id]["completed_at"] = datetime.now().isoformat()
-        save_data(TASKS_FILE, tasks_db)
-
-    active_tasks.pop(task_id, None)
-
-# ═══════════════════════════════════════════
+# ══════════════════════════════════════════
 # API ROUTES
-# ═══════════════════════════════════════════
-
-@app.route("/api/react", methods=["GET"])
-def api_react():
-    link = request.args.get("postlink")
-    emoji = request.args.get("emoji", "👍") # Default reaction
-    
-    if not link:
-        return jsonify({"success": False, "error": "postlink parameter is required"}), 400
-
-    channel, msg_id = parse_post_link(link)
-    if not channel or not msg_id:
-        return jsonify({"success": False, "error": "Invalid Telegram post link format"}), 400
-
-    settings = load_data(SETTINGS_FILE, DEFAULT_SETTINGS)
-    accounts = settings.get("accounts", [])
-    
-    # Filter only authorized accounts
-    valid_accounts = [acc for acc in accounts if acc["id"] in clients and clients[acc["id"]].is_connected()]
-    
-    if not valid_accounts:
-        return jsonify({"success": False, "error": "No active/authorized accounts available in admin panel"}), 400
-
-    task_id = f"task_{int(time.time())}_{random.randint(1000, 9999)}"
-    
-    # Save task to DB
-    tasks_db = load_data(TASKS_FILE, {})
-    tasks_db[task_id] = {
-        "id": task_id,
-        "link": link,
-        "channel": channel,
-        "msg_id": msg_id,
-        "emoji": emoji,
-        "status": "QUEUED",
-        "success": 0,
-        "failed": 0,
-        "total_accounts": len(valid_accounts),
-        "created_at": datetime.now().isoformat(),
-        "completed_at": None
-    }
-    save_data(TASKS_FILE, tasks_db)
-
-    # Start background task
-    coro = process_reaction_task(task_id, valid_accounts, channel, msg_id, emoji)
-    task_obj = run_async(coro)
-    active_tasks[task_id] = task_obj
-
-    return jsonify({
-        "success": True, 
-        "message": "Reaction task queued",
-        "task_id": task_id,
-        "accounts_engaged": len(valid_accounts)
-    })
-
-# Admin Authentication API
-@app.route("/api/admin/login", methods=["POST"])
-def admin_login():
-    data = request.json
-    password = data.get("password", "")
-    settings = load_data(SETTINGS_FILE, DEFAULT_SETTINGS)
-    
-    if password == settings.get("admin_password"):
-        session["admin"] = True
-        return jsonify({"success": True})
-    return jsonify({"success": False, "error": "Invalid password"}), 401
-
-# Accounts Management API
-@app.route("/api/admin/accounts", methods=["GET", "POST"])
-def manage_accounts():
-    if not session.get("admin"): return jsonify({"error": "Unauthorized"}), 401
-    
-    settings = load_data(SETTINGS_FILE, DEFAULT_SETTINGS)
-    
-    if request.method == "POST":
-        data = request.json
-        new_acc = {
-            "id": f"acc_{int(time.time())}",
-            "api_id": data["api_id"],
-            "api_hash": data["api_hash"],
-            "phone": data["phone"],
-            "session_name": f"sess_{random.randint(1000, 9999)}"
-        }
-        settings["accounts"].append(new_acc)
-        save_data(SETTINGS_FILE, settings)
-        return jsonify({"success": True, "account": new_acc})
-    
-    return jsonify({"accounts": settings["accounts"]})
-
-# Send OTP for specific account
-@app.route("/api/admin/send-otp", methods=["POST"])
-def admin_send_otp():
-    if not session.get("admin"): return jsonify({"error": "Unauthorized"}), 401
-    data = request.json
-    acc_id = data.get("acc_id")
-    
-    settings = load_data(SETTINGS_FILE, DEFAULT_SETTINGS)
-    acc = next((a for a in settings["accounts"] if a["id"] == acc_id), None)
-    if not acc: return jsonify({"error": "Account not found"}), 404
-
-    def async_send_otp():
-        client = await get_client(acc)
-        result = await client.send_code_request(acc["phone"])
-        session[f"code_hash_{acc_id}"] = result.phone_code_hash
-        return True
-    
-    future = run_async(async_send_otp())
+# ══════════════════════════════════════════
+@app.route('/get/postlink=<path:post_url>', methods=['GET'])
+def api_react(post_url):
+    emoji = request.args.get('emoji', '👍') # Default: 👍
+    future = run_async(_send_reaction(post_url, emoji))
     try:
-        future.result(timeout=15)
-        return jsonify({"success": True})
+        result = future.result(timeout=15)
+        return jsonify(result)
     except Exception as e:
-        return jsonify({"success": False, "error": str(e)})
+        return jsonify({"success": False, "error": "Server timeout or error."})
 
-# Verify OTP
-@app.route("/api/admin/verify-otp", methods=["POST"])
-def admin_verify_otp():
-    if not session.get("admin"): return jsonify({"error": "Unauthorized"}), 401
-    data = request.json
-    acc_id = data.get("acc_id")
-    code = data.get("code")
-    code_hash = session.get(f"code_hash_{acc_id}")
-    
-    settings = load_data(SETTINGS_FILE, DEFAULT_SETTINGS)
-    acc = next((a for a in settings["accounts"] if a["id"] == acc_id), None)
-
-    def async_verify():
-        client = await get_client(acc)
-        await client.sign_in(acc["phone"], code, phone_code_hash=code_hash)
-        return True
-    
-    future = run_async(async_verify())
-    try:
-        future.result(timeout=15)
-        return jsonify({"success": True})
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)})
-
-# Tasks Status API
-@app.route("/api/admin/tasks", methods=["GET"])
-def get_tasks():
-    if not session.get("admin"): return jsonify({"error": "Unauthorized"}), 401
-    tasks_db = load_data(TASKS_FILE, {})
-    return jsonify({"tasks": list(tasks_db.values())})
-
-# Serve Admin UI
-@app.route("/")
-def index():
-    return send_from_directory("public", "index.html")
-
-# Startup Restoration
-def on_startup():
-    print("[Server] Restoring Telegram sessions...")
-    future = run_async(restore_clients())
-    try:
-        future.result(timeout=20)
-    except Exception as e:
-        print(f"Error restoring: {e}")
-
-startup_timer = threading.Timer(2.0, on_startup)
-startup_timer.daemon = True
-startup_timer.start()
-
-if __name__ == "__main__":
-    PORT = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=PORT, debug=False)
+if __name__ == '__main__':
+    print("🚀 Reaction API Running on http://localhost:5001")
+    # প্রথমবার লগইন করার জন্য (CLI দিয়ে একবার চালাতে হবে সেশন তৈরি করতে)
+    app.run(host='0.0.0.0', port=5001, debug=False)
