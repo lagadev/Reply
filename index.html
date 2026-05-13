@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Panel - Reaction System</title>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <style>
+        :root {
+            --bg-deep: #04060f; --bg-card: rgba(12, 18, 45, 0.65); --neon-blue: #00b4ff;
+            --neon-purple: #8b5cf6; --neon-green: #00e676; --neon-red: #ff3d71;
+            --text-primary: #eef2ff; --text-secondary: #7b8ab8;
+        }
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: 'Space Grotesk', sans-serif; background: var(--bg-deep); color: var(--text-primary); min-height: 100vh; display: flex; justify-content: center; align-items: center; padding: 20px; }
+        .card { background: var(--bg-card); backdrop-filter: blur(20px); border: 1px solid rgba(0,180,255,0.12); border-radius: 20px; padding: 40px; max-width: 500px; width: 100%; box-shadow: 0 0 40px rgba(0,180,255,0.1); }
+        h1 { text-align: center; background: linear-gradient(135deg, #fff, var(--neon-blue)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin-bottom: 10px; }
+        p.sub { text-align: center; color: var(--text-secondary); font-size: 14px; margin-bottom: 30px; }
+        .input-group { margin-bottom: 20px; }
+        label { display: block; font-size: 12px; text-transform: uppercase; letter-spacing: 1px; color: var(--text-secondary); margin-bottom: 8px; font-weight: 600; }
+        input[type="text"] { width: 100%; padding: 14px 16px; background: rgba(6,10,25,0.7); border: 1px solid rgba(255,255,255,0.06); border-radius: 12px; color: var(--text-primary); font-size: 15px; outline: none; transition: 0.3s; }
+        input:focus { border-color: var(--neon-blue); box-shadow: 0 0 0 3px rgba(0,180,255,0.1); }
+        .emoji-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; margin-bottom: 25px; }
+        .emoji-btn { padding: 12px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); border-radius: 10px; font-size: 22px; cursor: pointer; transition: 0.3s; text-align: center; }
+        .emoji-btn:hover, .emoji-btn.active { background: rgba(0,180,255,0.1); border-color: var(--neon-blue); transform: scale(1.1); }
+        .btn { width: 100%; padding: 16px; border-radius: 50px; background: linear-gradient(135deg, var(--neon-blue), var(--neon-purple)); color: #fff; font-size: 16px; font-weight: 600; cursor: pointer; border: none; transition: 0.3s; box-shadow: 0 0 20px rgba(0,180,255,0.3); }
+        .btn:hover { transform: translateY(-2px); box-shadow: 0 0 30px rgba(0,180,255,0.5); }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+        .result-box { margin-top: 20px; padding: 15px; border-radius: 12px; background: rgba(0,0,0,0.3); font-size: 14px; display: none; }
+        .result-box.success { display: block; border: 1px solid rgba(0,230,118,0.3); color: var(--neon-green); }
+        .result-box.error { display: block; border: 1px solid rgba(255,61,113,0.3); color: var(--neon-red); }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h1><i class="fa-solid fa-shield-halved"></i> Admin Panel</h1>
+        <p class="sub">Secure Reaction API System</p>
+        
+        <div class="input-group">
+            <label>Telegram Post Link</label>
+            <input type="text" id="postUrl" placeholder="https://t.me/channel_name/123">
+        </div>
+
+        <label>Select Reaction</label>
+        <div class="emoji-grid">
+            <div class="emoji-btn active" data-emoji="👍">👍</div>
+            <div class="emoji-btn" data-emoji="❤️">❤️</div>
+            <div class="emoji-btn" data-emoji="🔥">🔥</div>
+            <div class="emoji-btn" data-emoji="👏">👏</div>
+            <div class="emoji-btn" data-emoji="🎉">🎉</div>
+            <div class="emoji-btn" data-emoji="💯">💯</div>
+        </div>
+
+        <button class="btn" id="reactBtn" onclick="sendReaction()">
+            Send Reaction
+        </button>
+
+        <div class="result-box" id="resultBox"></div>
+    </div>
+
+    <script>
+        let selectedEmoji = "👍";
+        document.querySelectorAll('.emoji-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelector('.emoji-btn.active')?.classList.remove('active');
+                btn.classList.add('active');
+                selectedEmoji = btn.getAttribute('data-emoji');
+            });
+        });
+
+        async function sendReaction() {
+            const url = document.getElementById('postUrl').value.trim();
+            const resultBox = document.getElementById('resultBox');
+            const btn = document.getElementById('reactBtn');
+            
+            if(!url) {
+                resultBox.className = 'result-box error';
+                resultBox.style.display = 'block';
+                resultBox.innerText = '⚠️ Please enter a post URL!';
+                return;
+            }
+
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Processing...';
+            resultBox.style.display = 'none';
+
+            try {
+                // Replace with your actual Render URL of react.py
+                const apiUrl = `https://your-react-api.onrender.com/get/postlink=${encodeURIComponent(url)}&emoji=${selectedEmoji}`;
+                
+                // Simulating API call for frontend demo
+                // const res = await fetch(apiUrl); const data = await res.json();
+                
+                setTimeout(() => {
+                    const isSuccess = Math.random() > 0.2; // Demo simulation
+                    if(isSuccess) {
+                        resultBox.className = 'result-box success';
+                        resultBox.innerText = `✅ Successfully reacted with ${selectedEmoji}! (Safe Mode)`;
+                    } else {
+                        resultBox.className = 'result-box error';
+                        resultBox.innerText = '❌ Flood Wait or Private Channel Error.';
+                    }
+                    resultBox.style.display = 'block';
+                    btn.disabled = false;
+                    btn.innerHTML = 'Send Reaction';
+                }, 1500);
+
+            } catch(e) {
+                resultBox.className = 'result-box error';
+                resultBox.innerText = '❌ Network Error.';
+                resultBox.style.display = 'block';
+                btn.disabled = false;
+                btn.innerHTML = 'Send Reaction';
+            }
+        }
+    </script>
+</body>
+</html>
