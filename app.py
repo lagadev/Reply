@@ -34,8 +34,8 @@ from telethon.errors import (
     FloodWaitError,
     ChatAdminRequiredError,
     MessageIdInvalidError,
-    UserBannedError,
-    AuthKeyUnregisteredError
+    AuthKeyUnregisteredError,
+    UserDeactivatedError
 )
 
 from telethon.tl.functions.messages import (
@@ -457,8 +457,8 @@ async def send_reaction_safe(username, channel, msg_id):
         logger.error(f"❌ Invalid message id for {username}")
         return False
         
-    except (UserBannedError, AuthKeyUnregisteredError):
-        logger.error(f"🚨 ACCOUNT BANNED OR INVALID: {username}")
+    except (AuthKeyUnregisteredError, UserDeactivatedError):
+        logger.error(f"🚨 ACCOUNT BANNED OR INVALID SESSION: {username}")
         # Mark as disconnected in DB
         user = get_user(username)
         if user:
