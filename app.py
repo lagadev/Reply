@@ -2,18 +2,15 @@ import os
 import json
 import asyncio
 import threading
-import re
-import time
-import random
 from datetime import datetime
+import sqlite3
 
 from flask import (
-    Flask, send_from_directory,
+    Flask, render_template, send_from_directory,
     request, jsonify, session
 )
-from telethon import TelegramClient, events, errors
-from telethon.tl.functions.messages import SendReactionRequest
-from telethon.tl.types import ReactionEmoji
+from flask_cors import CORS
+from telethon import TelegramClient, events
 from telethon.errors import (
     SessionPasswordNeededError,
     PhoneCodeInvalidError,
@@ -21,51 +18,83 @@ from telethon.errors import (
     FloodWaitError
 )
 
-# ═══════════════════════════════════════════
-# CONFIGURATION
-# ═══════════════════════════════════════════
-
+# ═══════════ CONFIGURATION ═══════════
 DATA_DIR = os.environ.get("DATA_DIR", "user_data")
 SESSIONS_DIR = os.environ.get("SESSIONS_DIR", "sessions")
-SETTINGS_FILE = os.path.join(DATA_DIR, "settings.json")
-TASKS_FILE = os.path.join(DATA_DIR, "tasks.json")
-COOLDOWN_SECONDS = 300  # 5 minutes per user for auto-reply
-
-# List of POSITIVE reactions to randomize (Anti-ban measure)
-POSITIVE_REACTIONS = ["👍", "❤️", "🔥", "🎉", "🥂", "💯", "💖", "🤩"]
+DB_FILE = os.path.join(DATA_DIR, "database.db")
+COOLDOWN_SECONDS = 300
 
 os.makedirs(DATA_DIR, exist_ok=True)
 os.makedirs(SESSIONS_DIR, exist_ok=True)
 
+# ═══════════ DATABASE SETUP ═══════════
+def init_db():
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute('''CREATE TABLE IF NOT EXISTS users (
+                 username TEXT PRIMARY KEY,
+                 api_id TEXT,
+                 api_hash TEXT,
+                 phone_number TEXT,
+                 reply_message TEXT,
+                 auto_reply_enabled INTEGER,
+                 connected INTEGER
+                 )''')
+    conn.commit()
+    conn.close()
+
+init_db()
+
+def get_user(username):
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute('SELECT * FROM users WHERE username=?', (username,))
+    row = c.fetchone()
+    conn.close()
+    if row:
+        return {
+            "username": row[0], "api_id": row[1], "api_hash": row[2],
+            "phone_number": row[3], "reply_message": row[4],
+            "auto_reply_enabled": bool(row[5]), "connected": bool(row[6])
+        }
+    return None
+
+def save_user(data):
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute('''INSERT OR REPLACE INTO users 
+                 (username, api_id, api_hash, phone_number, reply_message, auto_reply_enabled, connected) 
+                 VALUES (?, ?, ?, ?, ?, ?, ?)''', 
+                 (data.get("username"), data.get("api_id"), data.get("api_hash"),
+                  data.get("phone_number"), data.get("reply_message", "▶️ আমি এখন ব্যস্ত আছি। একটু পরে রিপ্লাই দিব ✅🥺"),
+                  int(data.get("auto_reply_enabled", False)), int(data.get("connected", False))))
+    conn.commit()
+    conn.close()
+
+# ═══════════ FLASK APP ═══════════
 app = Flask(__name__, static_folder="public", static_url_path="/static")
-app.secret_key = os.environ.get("SECRET_KEY", "tg-premium-secret-key-change-in-prod")
+app.secret_key = os.environ.get("SECRET_KEY", "super-secret-key-change-in-prod")
 
-# ═══════════════════════════════════════════
-# GLOBAL STATE
-# ═══════════════════════════════════════════
+# Frontend আলাদা হোস্ট করার জন্য CORS এবং Cookie সেটআপ
+CORS(app, supports_credentials=True)
+app.config['SESSION_COOKIE_SAMESITE'] = 'None'
+app.config['SESSION_COOKIE_SECURE'] = True # Production এ HTTPS এর জন্য
 
-clients = {}          
+# ═══════════ GLOBAL STATE ═══════════
+clients = {}
 phone_code_hashes = {}
-auto_reply_handlers = {}
+auto_reply_tasks = {}
 cooldowns = {}
-
 _loop = None
 _loop_thread = None
 
-# ═══════════════════════════════════════════
-# ASYNC LOOP MANAGER
-# ═══════════════════════════════════════════
-
 def _ensure_loop():
     global _loop, _loop_thread
-    if _loop is not None:
-        return _loop
+    if _loop is not None: return _loop
     _loop = asyncio.new_event_loop()
-
     def _run_loop():
         asyncio.set_event_loop(_loop)
         _loop.run_forever()
-
     _loop_thread = threading.Thread(target=_run_loop, daemon=True)
     _loop_thread.start()
     return _loop
@@ -74,106 +103,34 @@ def run_async(coro):
     loop = _ensure_loop()
     return asyncio.run_coroutine_threadsafe(coro, loop)
 
-# ═══════════════════════════════════════════
-# PERSISTENCE
-# ═══════════════════════════════════════════
-
-DEFAULT_SETTINGS = {
-    "username": "",
-    "api_id": "",
-    "api_hash": "",
-    "phone_number": "",
-    "reply_message": "▶️ আমি এখন ব্যস্ত আছি। একটু পরে রিপ্লাই দিব ✅🥺",
-    "auto_reply_enabled": False,
-    "connected": False,
-    "admin_password": "admin123"
-}
-
-def load_settings():
-    try:
-        if os.path.exists(SETTINGS_FILE):
-            with open(SETTINGS_FILE, "r", encoding="utf-8") as f:
-                data = json.load(f)
-                return {**DEFAULT_SETTINGS, **data}
-    except: pass
-    return {**DEFAULT_SETTINGS}
-
-def save_settings(settings):
-    with open(SETTINGS_FILE, "w", encoding="utf-8") as f:
-        json.dump(settings, f, indent=2, ensure_ascii=False)
-
-def load_tasks():
-    try:
-        if os.path.exists(TASKS_FILE):
-            with open(TASKS_FILE, "r", encoding="utf-8") as f:
-                return json.load(f)
-    except: pass
-    return {}
-
-def save_tasks(tasks):
-    with open(TASKS_FILE, "w", encoding="utf-8") as f:
-        json.dump(tasks, f, indent=2, ensure_ascii=False)
-
-# ═══════════════════════════════════════════
-# TELETHON HELPERS
-# ═══════════════════════════════════════════
+def loop_run(coro):
+    future = run_async(coro)
+    try: return future.result(timeout=30)
+    except Exception as e: print(e); return None
 
 def _session_path(username):
     return os.path.join(SESSIONS_DIR, f"tg_{username}")
 
 async def _create_client(username, api_id, api_hash):
-    session_path = _session_path(username)
-    client = TelegramClient(session_path, int(api_id), api_hash)
+    client = TelegramClient(_session_path(username), int(api_id), api_hash)
     clients[username] = client
     return client
 
 async def _get_client(username):
-    if username in clients:
-        if not clients[username].is_connected():
-            await clients[username].connect()
-        return clients[username]
-    settings = load_settings()
-    if settings.get("api_id") and settings.get("api_hash"):
-        return await _create_client(username, settings["api_id"], settings["api_hash"])
+    if username in clients: return clients[username]
+    user = get_user(username)
+    if user and user.get("api_id") and user.get("api_hash"):
+        return await _create_client(username, user["api_id"], user["api_hash"])
     return None
 
-async def _restore_client(username):
-    settings = load_settings()
-    if not settings.get("api_id") or not settings.get("api_hash"): return False
-    session_path = _session_path(username)
-    if not os.path.exists(session_path + ".session"): return False
-    try:
-        client = await _create_client(username, settings["api_id"], settings["api_hash"])
-        await client.connect()
-        if await client.is_user_authorized():
-            settings["connected"] = True
-            save_settings(settings)
-            if settings.get("auto_reply_enabled"):
-                await _start_auto_reply(username)
-            return True
-        else:
-            await client.disconnect()
-            del clients[username]
-            settings["connected"] = False
-            save_settings(settings)
-            return False
-    except Exception:
-        settings["connected"] = False
-        save_settings(settings)
-        return False
-
-# ═══════════════════════════════════════════
-# AUTO REPLY SYSTEM
-# ═══════════════════════════════════════════
-
+# ═══════════ AUTO REPLY SYSTEM ═══════════
 async def _start_auto_reply(username):
     client = await _get_client(username)
     if not client or not client.is_connected(): return False
-
     await _stop_auto_reply(username)
     cooldowns[username] = {}
-    settings = load_settings()
-    reply_msg = settings.get("reply_message", DEFAULT_SETTINGS["reply_message"])
+    user = get_user(username)
+    reply_msg = user.get("reply_message", "▶️ আমি এখন ব্যস্ত আছি। একটু পরে রিপ্লাই দিব ✅🥺")
 
     @client.on(events.NewMessage(incoming=True))
     async def handler(event):
@@ -181,152 +138,88 @@ async def _start_auto_reply(username):
             if not event.is_private: return
             sender = await event.get_sender()
             if sender and sender.bot: return
-            
             peer_id = event.sender_id
             now = datetime.now().timestamp()
             user_cd = cooldowns.get(username, {})
             last_reply = user_cd.get(str(peer_id), 0)
-            
             if now - last_reply < COOLDOWN_SECONDS: return
             
-            current_settings = load_settings()
-            if not current_settings.get("auto_reply_enabled"): return
-            
-            msg = current_settings.get("reply_message", reply_msg)
+            current_user = get_user(username)
+            if not current_user.get("auto_reply_enabled"): return
+            msg = current_user.get("reply_message", reply_msg)
             await event.reply(msg)
             cooldowns.setdefault(username, {})[str(peer_id)] = now
-        except FloodWaitError as e:
-            print(f"[AutoReply] Flood wait: {e.seconds}s")
-        except Exception as e:
-            print(f"[AutoReply] Error: {e}")
+        except FloodWaitError as e: print(f"Flood wait: {e.seconds}s")
+        except Exception as e: print(f"Error: {e}")
 
-    auto_reply_handlers[username] = handler
-    settings["auto_reply_enabled"] = True
-    save_settings(settings)
+    auto_reply_tasks[username] = handler
+    user["auto_reply_enabled"] = True
+    save_user(user)
     return True
 
 async def _stop_auto_reply(username):
     client = clients.get(username)
-    handler = auto_reply_handlers.pop(username, None)
+    handler = auto_reply_tasks.pop(username, None)
     if client and handler:
         try: client.remove_event_handler(handler)
         except: pass
-    settings = load_settings()
-    settings["auto_reply_enabled"] = False
-    save_settings(settings)
+    user = get_user(username)
+    if user:
+        user["auto_reply_enabled"] = False
+        save_user(user)
     cooldowns.pop(username, None)
 
-# ═══════════════════════════════════════════
-# POSITIVE REACTION SYSTEM (CORE LOGIC)
-# ═══════════════════════════════════════════
-
-def parse_post_link(link):
-    pattern = r"https://t.me/([^/]+)/(\d+)"
-    match = re.match(pattern, link)
-    if match:
-        return match.group(1), int(match.group(2))
-    return None, None
-
-async def process_reaction_task(task_id, channel, msg_id):
-    tasks_db = load_tasks()
-    tasks_db[task_id]["status"] = "RUNNING"
-    save_tasks(tasks_db)
-
-    success = 0
-    failed = 0
-    total_accounts = len(clients)
-
-    for username, client in list(clients.items()):
-        try:
-            if not client.is_connected() or not await client.is_user_authorized():
-                failed += 1
-                continue
-
-            # ANTI-BAN: Random delay between 3 to 8 seconds per account
-            delay = random.uniform(3.0, 8.0)
-            await asyncio.sleep(delay)
-
-            # Select a random POSITIVE reaction for this account
-            chosen_emoji = random.choice(POSITIVE_REACTIONS)
-
-            await client(SendReactionRequest(
-                peer=channel,
-                msg_id=msg_id,
-                reaction=[ReactionEmoji(emoticon=chosen_emoji)]
-            ))
-            success += 1
-            
-            # Update Live Progress
-            tasks_db = load_tasks()
-            if task_id in tasks_db:
-                tasks_db[task_id]["success"] = success
-                tasks_db[task_id]["failed"] = failed
-                save_tasks(tasks_db)
-
-        except FloodWaitError as e:
-            print(f"[Reaction] Flood wait: {e.seconds}s")
-            await asyncio.sleep(e.seconds + 5) # Strict respect for Telegram limits
-            failed += 1
-        except Exception as e:
-            print(f"[Reaction] Error: {e}")
-            failed += 1
-
-    tasks_db = load_tasks()
-    if task_id in tasks_db:
-        tasks_db[task_id]["status"] = "COMPLETED"
-        tasks_db[task_id]["success"] = success
-        tasks_db[task_id]["failed"] = failed
-        tasks_db[task_id]["completed_at"] = datetime.now().isoformat()
-        save_tasks(tasks_db)
-
-# ═══════════════════════════════════════════
-# ROUTES (AUTH & AUTO REPLY)
-# ═══════════════════════════════════════════
-
+# ═══════════ ROUTES (AUTH & DASHBOARD) ═══════════
 @app.route("/")
-def index():
-    return send_from_directory("public", "index.html")
+def index(): return jsonify({"status": "Backend is running"})
 
 @app.route("/login", methods=["POST"])
 def login():
     data = request.get_json(force=True)
     username = data.get("username", "").strip().replace("@", "").lower()
     if not username: return jsonify({"success": False, "error": "Username required"}), 400
-    
     session["username"] = username
-    settings = load_settings()
-    if settings.get("username") != username:
-        settings = {**DEFAULT_SETTINGS, "username": username}
-        save_settings(settings)
-    return jsonify({"success": True})
+    if not get_user(username):
+        save_user({"username": username})
+    return jsonify({"success": True, "username": username})
 
 @app.route("/logout", methods=["POST"])
 def logout():
     session.pop("username", None)
     return jsonify({"success": True})
 
+@app.route("/status", methods=["GET"])
+def get_status():
+    username = session.get("username")
+    if not username: return jsonify({"logged_in": False})
+    user = get_user(username)
+    if not user: return jsonify({"logged_in": False})
+    client = clients.get(username)
+    actually_connected = False
+    if client:
+        try: actually_connected = client.is_connected() and loop_run(client.is_user_authorized())
+        except: pass
+    return jsonify({
+        "logged_in": True, "username": username,
+        "connected": user.get("connected", False) or actually_connected,
+        "auto_reply_enabled": user.get("auto_reply_enabled", False),
+        "reply_message": user.get("reply_message", "")
+    })
+
 @app.route("/send-otp", methods=["POST"])
 def send_otp():
     username = session.get("username")
     if not username: return jsonify({"success": False, "error": "Not logged in"}), 401
-
     data = request.get_json(force=True)
-    api_id = data.get("api_id", "").strip()
-    api_hash = data.get("api_hash", "").strip()
-    phone_number = data.get("phone_number", "").strip()
-
-    if not api_id or not api_hash or not phone_number:
-        return jsonify({"success": False, "error": "All fields are required"}), 400
-
-    settings = load_settings()
-    settings["api_id"] = api_id
-    settings["api_hash"] = api_hash
-    settings["phone_number"] = phone_number
-    save_settings(settings)
-
-    future = run_async(_async_send_otp(username, api_id, api_hash, phone_number))
-    try: return jsonify(future.result(timeout=30))
-    except Exception as e: return jsonify({"success": False, "error": str(e)})
+    api_id, api_hash, phone_number = data.get("api_id", "").strip(), data.get("api_hash", "").strip(), data.get("phone_number", "").strip()
+    if not api_id or not api_hash or not phone_number: return jsonify({"success": False, "error": "All fields required"}), 400
+    
+    user = get_user(username)
+    user["api_id"], user["api_hash"], user["phone_number"] = api_id, api_hash, phone_number
+    save_user(user)
+    
+    result = loop_run(_async_send_otp(username, api_id, api_hash, phone_number))
+    return jsonify(result or {"success": False, "error": "Timeout"})
 
 async def _async_send_otp(username, api_id, api_hash, phone_number):
     try:
@@ -335,7 +228,6 @@ async def _async_send_otp(username, api_id, api_hash, phone_number):
             try: await old_client.disconnect()
             except: pass
             del clients[username]
-
         client = await _create_client(username, api_id, api_hash)
         await client.connect()
         result = await client.send_code_request(phone_number)
@@ -349,164 +241,73 @@ async def _async_send_otp(username, api_id, api_hash, phone_number):
 def verify_otp():
     username = session.get("username")
     if not username: return jsonify({"success": False, "error": "Not logged in"}), 401
-
     data = request.get_json(force=True)
-    code = data.get("code", "").strip()
-    password = data.get("password", "")
-
-    settings = load_settings()
-    phone_number = settings.get("phone_number", "")
-    code_hash = phone_code_hashes.get(username, "")
-
-    future = run_async(_async_verify_otp(username, phone_number, code, code_hash, password))
-    try: return jsonify(future.result(timeout=30))
-    except Exception as e: return jsonify({"success": False, "error": str(e)})
+    code, password = data.get("code", "").strip(), data.get("password", "")
+    if not code: return jsonify({"success": False, "error": "OTP required"}), 400
+    user = get_user(username)
+    result = loop_run(_async_verify_otp(username, user["phone_number"], code, phone_code_hashes.get(username, ""), password))
+    return jsonify(result or {"success": False, "error": "Timeout"})
 
 async def _async_verify_otp(username, phone_number, code, code_hash, password):
     client = clients.get(username)
     if not client: return {"success": False, "error": "No active client"}
     try:
         await client.sign_in(phone_number, code, phone_code_hash=code_hash)
-        settings = load_settings()
-        settings["connected"] = True
-        save_settings(settings)
+        user = get_user(username); user["connected"] = True; save_user(user)
+        phone_code_hashes.pop(username, None)
         return {"success": True}
     except SessionPasswordNeededError:
         if not password: return {"success": False, "error": "2FA password required"}
         try:
             await client.sign_in(password=password)
-            settings = load_settings()
-            settings["connected"] = True
-            save_settings(settings)
+            user = get_user(username); user["connected"] = True; save_user(user)
             return {"success": True}
-        except Exception as e: return {"success": False, "error": f"2FA failed: {str(e)}"}
-    except PhoneCodeInvalidError: return {"success": False, "error": "Invalid OTP code"}
+        except Exception as e: return {"success": False, "error": f"2FA failed: {e}"}
+    except PhoneCodeInvalidError: return {"success": False, "error": "Invalid OTP"}
     except Exception as e: return {"success": False, "error": str(e)}
-
-@app.route("/toggle-reply", methods=["POST"])
-def toggle_reply():
-    username = session.get("username")
-    if not username: return jsonify({"success": False, "error": "Not logged in"}), 401
-    data = request.get_json(force=True)
-    enabled = data.get("enabled", False)
-    
-    if enabled:
-        future = run_async(_start_auto_reply(username))
-        try:
-            if future.result(timeout=15): return jsonify({"success": True})
-            else: return jsonify({"success": False, "error": "Failed. Connect first."})
-        except Exception as e: return jsonify({"success": False, "error": str(e)})
-    else:
-        future = run_async(_stop_auto_reply(username))
-        try: future.result(timeout=15)
-        except: pass
-        return jsonify({"success": True})
 
 @app.route("/save-reply", methods=["POST"])
 def save_reply():
     username = session.get("username")
     if not username: return jsonify({"success": False, "error": "Not logged in"}), 401
-    data = request.get_json(force=True)
-    settings = load_settings()
-    settings["reply_message"] = data.get("message", "").strip()
-    save_settings(settings)
+    message = request.get_json(force=True).get("message", "").strip()
+    if not message: return jsonify({"success": False, "error": "Empty message"}), 400
+    user = get_user(username); user["reply_message"] = message; save_user(user)
     return jsonify({"success": True})
+
+@app.route("/toggle-reply", methods=["POST"])
+def toggle_reply():
+    username = session.get("username")
+    if not username: return jsonify({"success": False, "error": "Not logged in"}), 401
+    enabled = request.get_json(force=True).get("enabled", False)
+    user = get_user(username)
+    if enabled and not user.get("connected"): return jsonify({"success": False, "error": "Connect first"}), 400
+    if enabled:
+        result = loop_run(_start_auto_reply(username))
+        return jsonify({"success": bool(result)})
+    else:
+        loop_run(_stop_auto_reply(username))
+        return jsonify({"success": True})
 
 @app.route("/disconnect", methods=["POST"])
 def disconnect():
     username = session.get("username")
     if not username: return jsonify({"success": False, "error": "Not logged in"}), 401
-    run_async(_stop_auto_reply(username))
+    loop_run(_stop_auto_reply(username))
     client = clients.pop(username, None)
-    if client: run_async(client.disconnect())
-    
-    session_path = _session_path(username)
+    if client: loop_run(client.disconnect())
+    # Delete session file
+    sp = _session_path(username)
     for ext in ["", ".session"]:
-        f = session_path + ext
-        if os.path.exists(f): os.remove(f)
-            
-    settings = load_settings()
-    settings.update({"connected": False, "auto_reply_enabled": False, "api_id": "", "api_hash": "", "phone_number": ""})
-    save_settings(settings)
+        f = sp + ext
+        if os.path.exists(f):
+            try: os.remove(f)
+            except: pass
+    user = get_user(username)
+    user["connected"], user["auto_reply_enabled"], user["api_id"], user["api_hash"], user["phone_number"] = False, False, "", "", ""
+    save_user(user)
     return jsonify({"success": True})
-
-# ═══════════════════════════════════════════
-# ROUTES (REACTION API & STATUS)
-# ═══════════════════════════════════════════
-
-@app.route("/status", methods=["GET"])
-def get_status():
-    username = session.get("username")
-    if not username: return jsonify({"logged_in": False})
-    settings = load_settings()
-    client = clients.get(username)
-    actually_connected = False
-    if client:
-        try: actually_connected = client.is_connected()
-        except: pass
-    return jsonify({
-        "logged_in": True,
-        "username": username,
-        "connected": settings.get("connected", False) or actually_connected,
-        "auto_reply_enabled": settings.get("auto_reply_enabled", False),
-        "reply_message": settings.get("reply_message", ""),
-        "accounts_connected": len(clients)
-    })
-
-@app.route("/api/react", methods=["GET"])
-def api_react():
-    link = request.args.get("postlink")
-    if not link: return jsonify({"success": False, "error": "postlink parameter required"}), 400
-
-    channel, msg_id = parse_post_link(link)
-    if not channel or not msg_id: return jsonify({"success": False, "error": "Invalid link format"}), 400
-    if not clients: return jsonify({"success": False, "error": "No active sessions in panel"}), 400
-
-    task_id = f"task_{int(time.time())}_{random.randint(1000, 9999)}"
-    
-    tasks_db = load_tasks()
-    tasks_db[task_id] = {
-        "id": task_id,
-        "link": link,
-        "channel": channel,
-        "msg_id": msg_id,
-        "status": "QUEUED",
-        "success": 0,
-        "failed": 0,
-        "total_accounts": len(clients),
-        "created_at": datetime.now().isoformat(),
-        "completed_at": None
-    }
-    save_tasks(tasks_db)
-
-    run_async(process_reaction_task(task_id, channel, msg_id))
-    return jsonify({"success": True, "message": "Positive reaction task queued", "task_id": task_id})
-
-@app.route("/api/tasks", methods=["GET"])
-def get_tasks():
-    tasks_db = load_tasks()
-    return jsonify({"tasks": list(tasks_db.values())})
-
-# ═══════════════════════════════════════════
-# APP STARTUP
-# ═══════════════════════════════════════════
-
-def _on_startup():
-    settings = load_settings()
-    username = settings.get("username", "")
-    if username and settings.get("api_id") and settings.get("api_hash"):
-        print(f"[Startup] Restoring session for {username}...")
-        future = run_async(_restore_client(username))
-        try:
-            if future.result(timeout=20): print(f"[Startup] Session restored for {username}")
-            else: print(f"[Startup] Could not restore session")
-        except Exception as e: print(f"[Startup] Error: {e}")
-
-_startup_timer = threading.Timer(3.0, _on_startup)
-_startup_timer.daemon = True
-_startup_timer.start()
 
 if __name__ == "__main__":
     PORT = int(os.environ.get("PORT", 5000))
-    print(f"[Server] Starting on 0.0.0.0:{PORT}")
     app.run(host="0.0.0.0", port=PORT, debug=False)
